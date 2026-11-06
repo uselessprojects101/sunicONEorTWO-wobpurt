@@ -24,6 +24,9 @@ rm -rf dist && mkdir -p dist
 cp build/index.html build/index.js build/index.wasm dist/
 touch dist/.nojekyll
 
+# GitHub Pages serves the docs/ folder
+rm -rf docs && cp -r dist docs
+
 echo
 echo "Build finished. To test:"
 echo "  cd dist && python3 -m http.server 8000"
