@@ -1,4 +1,12 @@
 # sunicONEorTWO-wobpurt
-This is Sonic 1's and Sonic 2's 2013 RSDK to the Web, because there isn't any actual good ports other than Sonic CD and Sonic Mania. This is just an attempt.
+This is a port of RSDKv4 to the web, allowing you to play Sonic 1 and Sonic 2's respective RSDK's on the web.
 
-YOU NEED THE data.rsdk IN ORDER TO RUN THIS! 
+This is just an attempt, and I may or may not update this to my liking, or to fix bugs.
+
+YOU NEED THE "data.rsdk" OF EITHER SONIC 1 OR 2 IN ORDER TO RUN THIS! 
+
+# ISSUES AS OF NOW:
+1. The save files are combined between Sonic 1 and 2.
+2. No way to get to debug mode.
+3. No versus mode works.
+4. Main Menu's shading is not present. 
