@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sonic 2 (2013) – Web Port</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #e8e8f0; }
+
+  /* ---------- setup screen ---------- */
+  #setup { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    padding: 24px; box-sizing: border-box; background: radial-gradient(circle at 50% 30%, #101a44, #05060f 70%); }
+  .card { width: min(560px, 100%); }
+  h1 { margin: 0 0 6px; font-size: 28px; letter-spacing: .3px; }
+  .sub { margin: 0 0 22px; color: #9aa3c7; line-height: 1.5; }
+  #drop { border: 2px dashed #3b4a8f; border-radius: 12px; padding: 28px 18px; text-align: center;
+    cursor: pointer; background: rgba(255,255,255,.03); transition: border-color .15s, background .15s; }
+  #drop.over { border-color: #6f86ff; background: rgba(111,134,255,.1); }
+  #drop strong { display: block; margin-bottom: 4px; }
+  #drop span { color: #9aa3c7; font-size: 14px; }
+  #fileName { margin-top: 10px; font-size: 14px; color: #bcd0ff; min-height: 1.3em; word-break: break-all; }
+  button { font: inherit; border: 0; border-radius: 8px; padding: 12px 22px; cursor: pointer;
+    background: #3d5afe; color: #fff; font-weight: 600; }
+  button:disabled { background: #2a2f4d; color: #707899; cursor: default; }
+  button.link { background: none; color: #8fa2ff; padding: 4px 0; font-weight: 400; text-decoration: underline; }
+  .row { display: flex; align-items: center; gap: 16px; margin-top: 18px; flex-wrap: wrap; }
+  #status { margin-top: 14px; min-height: 1.4em; color: #bcd0ff; font-size: 14px; }
+  #status.err { color: #ff8a8a; }
+  .fine { margin-top: 26px; font-size: 12px; line-height: 1.55; color: #6f7799; }
+  .hidden { display: none !important; }
+  #diag { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; max-height: 35vh; overflow: auto; margin: 0; padding: 10px 14px; background: rgba(10,10,20,.92); font: 12px/1.45 ui-monospace, Consolas, monospace; color: #ffb0b0; white-space: pre-wrap; word-break: break-word; }
+
+  /* ---------- game ---------- */
+  #stage { position: fixed; inset: 0; background: #000; }
+  #canvas { display: block; width: 100% !important; height: 100% !important; object-fit: contain; outline: none; }
+  #fsbtn { position: absolute; top: 10px; right: 10px; padding: 8px 12px; font-size: 13px; opacity: 0;
+    background: rgba(20,24,50,.75); transition: opacity .2s; }
+  #stage:hover #fsbtn, #fsbtn:focus-visible { opacity: 1; }
+</style>
+<script>
+  // On-screen error log, so problems are visible without opening the console.
+  window.__diag = [];
+  window.diagLog = function (m) {
+    if (!m) return;
+    window.__diag.push(String(m));
+    var d = document.getElementById("diag");
+    if (d) { d.textContent = window.__diag.slice(-12).join("\n"); d.classList.remove("hidden"); }
+  };
+  window.addEventListener("error", function (e) {
+    var t = e.target;
+    if (t && t !== window && (t.src || t.href)) diagLog("Failed to load: " + (t.src || t.href));
+    else diagLog("Error: " + e.message);
+  }, true);
+  window.addEventListener("unhandledrejection", function (e) {
+    diagLog("Error: " + ((e.reason && e.reason.message) || e.reason));
+  });
+</script>
+<script>
+  // Safety net for browser autoplay rules: remember every AudioContext the game
+  // creates and resume it on the first key press / click.
+  (function () {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    var all = [];
+    function Wrapped() { var c = new (Function.prototype.bind.apply(AC, [null].concat([].slice.call(arguments))))(); all.push(c); return c; }
+    Wrapped.prototype = AC.prototype;
+    window.AudioContext = Wrapped;
+    function resume() { all.forEach(function (c) { if (c.state === "suspended") c.resume(); }); }
+    ["keydown", "pointerdown", "touchend"].forEach(function (ev) { window.addEventListener(ev, resume, true); });
+  })();
+</script>
+</head>
+<body>
+
+<div id="setup">
+  <div class="card">
+    <h1>Sonic 2 (2013) – Web Port</h1>
+    <p class="sub">This site contains no game data. To play, choose your own <b>Data.rsdk</b> from your copy of Sonic 2 (2013).
+      The file is read inside your browser only and is never uploaded.</p>
+
+    <div id="pickArea">
+      <div id="drop" tabindex="0" role="button" aria-label="Choose Data.rsdk">
+        <strong>Click to choose Data.rsdk</strong>
+        <span>or drag and drop it here</span>
+      </div>
+      <input id="file" type="file" accept=".rsdk" class="hidden">
+      <div id="fileName"></div>
+    </div>
+
+    <div id="rememberedArea" class="hidden">
+      <p class="sub" style="margin-bottom:0">Your Data.rsdk is stored in this browser from last time.</p>
+    </div>
+
+    <div class="row">
+      <button id="play" disabled>Loading…</button>
+      <button id="forget" class="link hidden">Forget my stored Data.rsdk</button>
+    </div>
+    <div id="status"></div>
+
+    <p class="fine">
+      Your Data.rsdk and save files are kept in this browser (IndexedDB) so you don't have to pick the file every time.<br>
+      Fan project, not affiliated with or endorsed by SEGA. Sonic the Hedgehog is a trademark of SEGA.<br>
+      Built on the RSDKv4 Decompilation by Rubberduckycooly and st×tic, from the Retro Engine by Christian “Taxman” Whitehead. Non-commercial.
+    </p>
+  </div>
+</div>
+
+<div id="stage" class="hidden">
+  <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+  <button id="fsbtn" title="Fullscreen (or double-click the game)">Fullscreen</button>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var DATA_DIR = "/data", DATA_PATH = "/data/Data.rsdk";
+  var FS = null, runtimeReady = false, hasStored = false, picked = null, started = false;
+  var syncing = false, syncAgain = false;
+
+  function status(msg, isErr) { var s = $("status"); s.textContent = msg || ""; s.className = isErr ? "err" : ""; }
+
+  // ---- saving to IndexedDB (never run two syncs at once) ----
+  function syncToDisk() {
+    if (!FS) return Promise.resolve();
+    if (syncing) { syncAgain = true; return Promise.resolve(); }
+    syncing = true;
+    return new Promise(function (resolve) {
+      FS.syncfs(false, function (err) {
+        if (err) console.warn("Save sync failed:", err);
+        syncing = false;
+        if (syncAgain) { syncAgain = false; syncToDisk(); }
+        resolve();
+      });
+    });
+  }
+  function startAutosave() {
+    setInterval(syncToDisk, 4000);
+    document.addEventListener("visibilitychange", function () { if (document.hidden) syncToDisk(); });
+    window.addEventListener("pagehide", syncToDisk);
+  }
+
+  // ---- UI state ----
+  function refreshUI() {
+    var ready = runtimeReady && FS;
+    if (ready) { try { hasStored = FS.analyzePath(DATA_PATH).exists; } catch (e) { hasStored = false; } }
+    $("rememberedArea").classList.toggle("hidden", !(ready && hasStored && !picked));
+    $("pickArea").classList.toggle("hidden", !!(ready && hasStored && !picked));
+    $("forget").classList.toggle("hidden", !(ready && hasStored));
+    var play = $("play");
+    if (!ready) { play.textContent = "Loading…"; play.disabled = true; return; }
+    play.textContent = "Play";
+    play.disabled = !(picked || hasStored);
+  }
+
+  function setFile(f) {
+    if (!f) return;
+    picked = f;
+    $("fileName").textContent = f.name + "  (" + (f.size / 1048576).toFixed(1) + " MB)";
+    status("");
+    refreshUI();
+  }
+
+  $("drop").addEventListener("click", function () { $("file").click(); });
+  $("drop").addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); } });
+  $("file").addEventListener("change", function (e) { setFile(e.target.files[0]); });
+  ["dragenter", "dragover"].forEach(function (ev) {
+    $("drop").addEventListener(ev, function (e) { e.preventDefault(); $("drop").classList.add("over"); });
+  });
+  ["dragleave", "drop"].forEach(function (ev) {
+    $("drop").addEventListener(ev, function (e) { e.preventDefault(); $("drop").classList.remove("over"); });
+  });
+  $("drop").addEventListener("drop", function (e) { setFile(e.dataTransfer.files[0]); });
+
+  $("forget").addEventListener("click", function () {
+    try { FS.unlink(DATA_PATH); } catch (e) {}
+    picked = null; $("fileName").textContent = "";
+    syncToDisk().then(function () { status("Stored Data.rsdk removed."); refreshUI(); });
+  });
+
+  // ---- fullscreen ----
+  function toggleFullscreen() {
+    if (document.fullscreenElement) { document.exitFullscreen(); return; }
+    var el = $("stage");
+    if (el.requestFullscreen) el.requestFullscreen({ navigationUI: "hide" }).catch(function () {});
+  }
+  $("fsbtn").addEventListener("click", toggleFullscreen);
+  $("canvas").addEventListener("dblclick", toggleFullscreen);
+
+  // Keep arrow keys / space from scrolling or tabbing away while playing
+  window.addEventListener("keydown", function (e) {
+    if (started && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " ", "Tab"].indexOf(e.key) >= 0) e.preventDefault();
+  });
+
+  // ---- start the game ----
+  $("play").addEventListener("click", async function () {
+    $("play").disabled = true;
+    try {
+      if (picked) {
+        status("Reading Data.rsdk…");
+        var buf = new Uint8Array(await picked.arrayBuffer());
+        var magic = "RSDKvB";
+        var ok = buf.length > 1048576;
+        for (var i = 0; ok && i < magic.length; i++) ok = buf[i] === magic.charCodeAt(i);
+        if (!ok) throw new Error("That doesn't look like an RSDKv4 Data.rsdk file (wrong header). Please choose the Data.rsdk from Sonic 2 (2013).");
+        FS.writeFile(DATA_PATH, buf);
+        status("Saving a copy in this browser…");
+        await syncToDisk();
+      }
+      status("");
+      $("setup").classList.add("hidden");
+      $("stage").classList.remove("hidden");
+      started = true;
+      startAutosave();
+      $("canvas").focus();
+      Module.callMain([]);
+    } catch (err) {
+      console.error(err);
+      if (started) { started = false; $("stage").classList.add("hidden"); $("setup").classList.remove("hidden"); }
+      status(String(err && err.message || err), true);
+      $("play").disabled = false;
+    }
+  });
+
+  // ---- Emscripten module configuration ----
+  window.Module = {
+    noInitialRun: true,
+    canvas: $("canvas"),
+    print: function () { console.log.apply(console, arguments); },
+    printErr: function () {
+      var m = [].slice.call(arguments).join(" ");
+      console.warn(m);
+      if (/error|fail|abort|unable|cannot|can't|not supported/i.test(m)) diagLog(m);
+    },
+    setStatus: function (t) { if (t && !runtimeReady) $("status").textContent = t; },
+    preRun: [function () {
+      try {
+        FS = Module.FS || window.FS;
+        if (!FS) throw new Error("FS is not available (the build did not export it)");
+        try { FS.mkdir(DATA_DIR); } catch (e) {}
+        var IDB = Module.IDBFS || (FS.filesystems && FS.filesystems.IDBFS) || window.IDBFS;
+        if (!IDB) { diagLog("IndexedDB storage is not available in this build: saves are disabled."); return; }
+        FS.mount(IDB, {}, DATA_DIR);
+        var add = Module.addRunDependency || window.addRunDependency;
+        var del = Module.removeRunDependency || window.removeRunDependency;
+        var finished = false;
+        function done(msg) { if (finished) return; finished = true; diagLog(msg); del("idbfs-load"); }
+        add("idbfs-load");
+        setTimeout(function () { done("Saved-data storage did not respond: continuing without saved data."); }, 6000);
+        FS.syncfs(true, function (err) { done(err ? "Could not load saved data: " + err : ""); });
+      } catch (e) {
+        diagLog("Startup error: " + e.message);
+        status("Startup error: " + e.message, true);
+      }
+    }],
+    onRuntimeInitialized: function () {
+      if (!FS) FS = Module.FS || window.FS;
+      runtimeReady = true;
+      refreshUI();
+    },
+    onAbort: function (what) { diagLog("Engine aborted: " + what); status("The game crashed: " + what, true); }
+  };
+  $("canvas").addEventListener("webglcontextlost", function (e) { e.preventDefault(); }, false);
+
+  if (location.protocol === "file:") {
+    status("Open this page through a web server (http://localhost:8000), not by double-clicking the file.", true);
+  }
+  setTimeout(function () {
+    if (!runtimeReady) {
+      status("Still starting the engine… the details below should say why.", true);
+      diagLog("Engine not ready after 8 seconds. Page address: " + location.href);
+    }
+  }, 8000);
+
+  refreshUI();
+})();
+</script>
+<pre id="diag" class="hidden"></pre>
+{{{ SCRIPT }}}
+</body>
+</html>

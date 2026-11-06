@@ -1,0 +1,8 @@
+*.rsdk
+Data/
+Bytecode/
+Sonic2EXTRACTED/
+Sonic2_2013_RSDKv4/
+build/
+*.exe
+*.dll
