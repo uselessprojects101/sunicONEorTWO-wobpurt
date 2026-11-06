@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Sonic 1/2 Webport</title>
+<title>Sonic 1 & Sonic 2's RSDKv4 Player/Webport</title>
 <style>
   :root { color-scheme: dark; }
   @font-face { font-family: "Ubuntu Sans"; font-style: normal; font-weight: 400; font-display: swap;
@@ -46,7 +46,7 @@
   #stage:hover #fsbtn, #fsbtn:focus-visible { opacity: 1; }
 </style>
 <script>
-  // On-screen error log, so problems are visible without opening the console.
+  // any on screen errors
   window.__diag = [];
   window.diagLog = function (m) {
     if (!m) return;
@@ -64,8 +64,8 @@
   });
 </script>
 <script>
-  // Safety net for browser autoplay rules: remember every AudioContext the game
-  // creates and resume it on the first key press / click.
+  // safety net for browser autoplay rules: remember every AudioContext the game
+  // creates and resume it on the first key press or click.
   (function () {
     var AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
@@ -94,19 +94,19 @@
     </div>
 
     <div id="rememberedArea" class="hidden">
-      <p class="note">Your Data.rsdk is stored in this browser from last time.</p>
+      <p class="note">your rsdk file is stored in this browser from last time</p>
     </div>
 
     <div class="row">
       <button id="play" disabled>Loading…</button>
-      <button id="forget" class="link hidden">Forget my stored Data.rsdk</button>
+      <button id="forget" class="link hidden">forget my rsdk</button>
     </div>
     <div id="status"></div>
 
     <p class="fine">
-      Your Data.rsdk and save files are kept in this browser (IndexedDB) so you don't have to pick the file every time.<br>
-      Fan project, not affiliated with or endorsed by SEGA. Sonic the Hedgehog is a trademark of SEGA.<br>
-      Built on the RSDKv4 Decompilation by Rubberduckycooly and st×tic, from the Retro Engine by Christian “Taxman” Whitehead. Non-commercial.<br>
+      your Data.rsdk and save files are kept in this browser (IndexedDB) so you don't have to pick the file every time.<br>
+      fan project, not affiliated with or endorsed by SEGA. Sonic the Hedgehog is a trademark of SEGA.<br>
+      built on the RSDKv4 decompilation by Rubberduckycooly and st×tic, from the Retro Engine by Christian “Taxman” Whitehead. Non-commercial.<br>
       Font: Ubuntu Sans © Canonical Ltd, <a href="https://ubuntu.com/legal/font-licence" target="_blank" rel="noopener">Ubuntu Font Licence 1.0</a>.
     </p>
   </div>
@@ -203,14 +203,14 @@
     $("play").disabled = true;
     try {
       if (picked) {
-        status("Reading Data.rsdk…");
+        status("Reading...");
         var buf = new Uint8Array(await picked.arrayBuffer());
         var magic = "RSDKvB";
         var ok = buf.length > 1048576;
         for (var i = 0; ok && i < magic.length; i++) ok = buf[i] === magic.charCodeAt(i);
-        if (!ok) throw new Error("That doesn't look like an RSDKv4 Data.rsdk file (wrong header). Please choose the Data.rsdk from Sonic 1 or Sonic 2 (2013).");
+        if (!ok) throw new Error("that aint it, man. (wrong header). please choose the correct rsdk file from either Sonic 1 or Sonic 2");
         FS.writeFile(DATA_PATH, buf);
-        status("Saving a copy in this browser…");
+        status("Saving your copy, please hold…");
         await syncToDisk();
       }
       status("");
@@ -238,7 +238,7 @@
       console.warn(m);
       if (/error|fail|abort|unable|cannot|can't|not supported/i.test(m)) diagLog(m);
     },
-    setStatus: function (t) { if (t && t !== "Running..." && !runtimeReady) $("status").textContent = t; },
+    setStatus: function (t) { if (t && t !== "runnin..please hold." && !runtimeReady) $("status").textContent = t; },
     preRun: [function () {
       try {
         FS = Module.FS || window.FS;
