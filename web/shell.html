@@ -82,7 +82,7 @@
 
 <div id="setup">
   <div class="card">
-    <h1>Sonic 1/2 Webport</h1>
+    <h1>Sonic 1 & Sonic 2's RSDKv4 Player/Webport</h1>
 
     <div id="pickArea">
       <div id="drop" tabindex="0" role="button" aria-label="Choose Data.rsdk">
@@ -126,7 +126,7 @@
 
   function status(msg, isErr) { var s = $("status"); s.textContent = msg || ""; s.className = isErr ? "err" : ""; }
 
-  // ---- saving to IndexedDB (never run two syncs at once) ----
+  // saving to IndexedDB
   function syncToDisk() {
     if (!FS) return Promise.resolve();
     if (syncing) { syncAgain = true; return Promise.resolve(); }
@@ -146,7 +146,7 @@
     window.addEventListener("pagehide", syncToDisk);
   }
 
-  // ---- UI state ----
+  // ui
   function refreshUI() {
     var ready = runtimeReady && FS;
     if (ready) { try { hasStored = FS.analyzePath(DATA_PATH).exists; } catch (e) { hasStored = false; } }
@@ -184,7 +184,7 @@
     syncToDisk().then(function () { status("Stored Data.rsdk removed."); refreshUI(); });
   });
 
-  // ---- fullscreen ----
+  //fullscreen button
   function toggleFullscreen() {
     if (document.fullscreenElement) { document.exitFullscreen(); return; }
     var el = $("stage");
@@ -193,12 +193,12 @@
   $("fsbtn").addEventListener("click", toggleFullscreen);
   $("canvas").addEventListener("dblclick", toggleFullscreen);
 
-  // Keep arrow keys / space from scrolling or tabbing away while playing
+  // keep arrow keys and space from scrolling or tabbing away while playing
   window.addEventListener("keydown", function (e) {
     if (started && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " ", "Tab"].indexOf(e.key) >= 0) e.preventDefault();
   });
 
-  // ---- start the game ----
+  // starting the game
   $("play").addEventListener("click", async function () {
     $("play").disabled = true;
     try {
@@ -228,7 +228,7 @@
     }
   });
 
-  // ---- Emscripten module configuration ----
+  // emscripten module configuration
   window.Module = {
     noInitialRun: true,
     canvas: $("canvas"),
