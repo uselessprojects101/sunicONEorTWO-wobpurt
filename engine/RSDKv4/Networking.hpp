@@ -1,7 +1,9 @@
 #if RETRO_USE_NETWORKING
 #ifndef NETWORKING_H
 #define NETWORKING_H
+#ifndef __EMSCRIPTEN__ // WEB-PORT:net-header
 #include <thread>
+#endif
 #include <memory>
 
 #define PACKET_SIZE 0x1000

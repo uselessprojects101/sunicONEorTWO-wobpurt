@@ -531,8 +531,15 @@ static double emAccumMs = 0.0;
 // One engine frame, called by the browser's requestAnimationFrame.
 // The game is built around a fixed 60 updates per second, so we accumulate
 // real time and only step the game when a full 1/60th of a second is due.
+#if RETRO_USE_NETWORKING
+void NetworkWebPoll(); // WEB-PORT:net-poll
+#endif
+
 static void EmscriptenFrame()
 {
+#if RETRO_USE_NETWORKING
+    NetworkWebPoll();
+#endif
     double now = emscripten_get_now();
     double dt  = now - emLastMs;
     emLastMs   = now;

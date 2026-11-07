@@ -10,6 +10,9 @@ set_target_properties(RetroEngine PROPERTIES
     SUFFIX ".html"
 )
 
+# Multiplayer over WebSockets (replaces the desktop UDP code, which Networking.cpp skips on the web)
+target_sources(RetroEngine PRIVATE ${CMAKE_SOURCE_DIR}/RSDKv4/NetworkingWeb.cpp)
+
 # Our custom page (file picker, fullscreen canvas, save syncing)
 set(RETRO_WEB_SHELL "${CMAKE_SOURCE_DIR}/../web/shell.html" CACHE FILEPATH "HTML shell for the web build")
 

@@ -33,8 +33,22 @@
   .row { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; margin-top: 18px; }
   #status { margin-top: 14px; min-height: 1.4em; color: #bcd0ff; font-size: 14px; }
   #status.err { color: #ff8a8a; }
-  .fine a { color: #8fa2ff; }
   .fine { margin: 26px auto 0; max-width: 520px; font-size: 12px; line-height: 1.55; color: #6f7799; }
+  #creditsBtn { position: fixed; left: 14px; bottom: 14px; z-index: 5; font-size: 13px; padding: 6px 8px; }
+  #credits { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
+    padding: 24px; box-sizing: border-box; background: rgba(0,0,0,.82); }
+  #credits .panel { width: min(520px, 100%); max-height: 100%; overflow-y: auto; box-sizing: border-box;
+    padding: 22px 24px; text-align: left; background: #0d0d14; border: 1px solid #2a2f4d; border-radius: 12px; }
+  #credits h2 { margin: 0 0 14px; font-size: 20px; }
+  #credits p { margin: 0 0 12px; font-size: 14px; line-height: 1.6; color: #c8cde8; }
+  #credits a { color: #8fa2ff; }
+  #credits button { margin-top: 6px; }
+  #whichGame, #storedArea { margin-top: 18px; }
+  .choices { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
+  #storedList { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 10px; }
+  .stored { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; }
+  button.alt { background: #1b2040; border: 1px solid #3b4a8f; }
+  button.alt:hover { border-color: #6f86ff; }
   .hidden { display: none !important; }
   #diag { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; max-height: 35vh; overflow: auto; margin: 0; padding: 10px 14px; background: rgba(10,10,20,.92); font: 12px/1.45 ui-monospace, Consolas, monospace; color: #ffb0b0; white-space: pre-wrap; word-break: break-word; }
 
@@ -45,6 +59,11 @@
     background: rgba(20,24,50,.75); transition: opacity .2s; }
   #stage:hover #fsbtn, #fsbtn:focus-visible { opacity: 1; }
 </style>
+<script>
+  // multiplayer relay server. for testing on your own computer leave it as is;
+  // for a public site, put your server's address here (it must start with wss://)
+  window.RSDK_RELAY_URL = "ws://localhost:8787";
+</script>
 <script>
   // any on screen errors
   window.__diag = [];
@@ -91,24 +110,37 @@
       </div>
       <input id="file" type="file" accept=".rsdk" class="hidden">
       <div id="fileName"></div>
+      <div id="whichGame" class="hidden">
+        <p class="note">couldn't tell which game this is. which one is it?</p>
+        <div class="choices">
+          <button id="pickS1" class="alt">sonic 1</button>
+          <button id="pickS2" class="alt">sonic 2</button>
+        </div>
+      </div>
     </div>
 
-    <div id="rememberedArea" class="hidden">
-      <p class="note">your rsdk file is stored in this browser from last time</p>
+    <div id="storedArea" class="hidden">
+      <p class="note">saved in this browser from last time:</p>
+      <div id="storedList"></div>
     </div>
 
     <div class="row">
       <button id="play" disabled>loadin…</button>
-      <button id="forget" class="link hidden">forget my rsdk</button>
     </div>
     <div id="status"></div>
 
-    <p class="fine">
-      your rsdk file and save files are saved locally (IndexedDB)<br>
-      this is a fan project, and not affiliated with or endorsed by SEGA. Sonic the Hedgehog is a trademark of SEGA.<br>
-      built on the RSDKv4 decompilation by Rubberduckycooly and st×tic, from the Retro Engine by Christian “Taxman” Whitehead. Non-commercial.<br>
-      Font: Ubuntu Sans © Canonical Ltd, <a href="https://ubuntu.com/legal/font-licence" target="_blank" rel="noopener">Ubuntu Font Licence 1.0</a>.
-    </p>
+    <p class="fine">your rsdk file and save files are saved locally (IndexedDB)</p>
+  </div>
+
+  <button id="creditsBtn" class="link">credits</button>
+  <div id="credits" class="hidden" role="dialog" aria-modal="true" aria-labelledby="creditsTitle">
+    <div class="panel">
+      <h2 id="creditsTitle">credits</h2>
+      <p>this is a fan project, and not affiliated with or endorsed by SEGA. Sonic the Hedgehog is a trademark of SEGA.</p>
+      <p>built on the RSDKv4 decompilation by Rubberduckycooly and st×tic, from the Retro Engine by Christian “Taxman” Whitehead. Non-commercial.</p>
+      <p>Font: Ubuntu Sans © Canonical Ltd, <a href="https://ubuntu.com/legal/font-licence" target="_blank" rel="noopener">Ubuntu Font Licence 1.0</a>.</p>
+      <button id="creditsClose">close</button>
+    </div>
   </div>
 </div>
 
@@ -120,13 +152,121 @@
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
-  var DATA_DIR = "/data", DATA_PATH = "/data/Data.rsdk";
-  var FS = null, runtimeReady = false, hasStored = false, picked = null, started = false;
-  var syncing = false, syncAgain = false;
+  // each game gets its own storage folder (its own rsdk copy and its own saves)
+  var GAMES = {
+    s1: { name: "sonic 1", dir: "/rsdkweb_s1" },
+    s2: { name: "sonic 2", dir: "/rsdkweb_s2" }
+  };
+  var FS = null, IDB = null, runtimeReady = false, picked = null, pickedGame = null, started = false;
+  var mounted = {}, syncing = false, syncAgain = false;
+  var BAD_FILE = "that aint it, man. (wrong header). please choose the correct rsdk file from either Sonic 1 or Sonic 2";
 
   function status(msg, isErr) { var s = $("status"); s.textContent = msg || ""; s.className = isErr ? "err" : ""; }
 
-  // saving to IndexedDB
+  // ---- which games have a stored copy (a note kept in localStorage) ----
+  function getStored() { try { return JSON.parse(localStorage.getItem("rsdkweb_stored") || "{}") || {}; } catch (e) { return {}; } }
+  function setStored(id, on) {
+    var s = getStored(); if (on) s[id] = true; else delete s[id];
+    try { localStorage.setItem("rsdkweb_stored", JSON.stringify(s)); } catch (e) {}
+  }
+
+  // --- game detection (start) ---
+  // md5 (the engine looks files up by the md5 of their lowercase path)
+  function md5(msg) {
+    var K = new Uint32Array(64), i;
+    for (i = 0; i < 64; i++) K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 0x100000000);
+    var R = [7, 12, 17, 22, 5, 9, 14, 20, 4, 11, 16, 23, 6, 10, 15, 21];
+    var n = msg.length, total = (((n + 8) >> 6) + 1) << 6;
+    var buf = new Uint8Array(total); buf.set(msg); buf[n] = 0x80;
+    var dv = new DataView(buf.buffer);
+    dv.setUint32(total - 8, (n << 3) >>> 0, true);
+    dv.setUint32(total - 4, Math.floor(n / 0x20000000), true);
+    var a0 = 0x67452301, b0 = 0xefcdab89, c0 = 0x98badcfe, d0 = 0x10325476;
+    for (var off = 0; off < total; off += 64) {
+      var M = new Uint32Array(16);
+      for (i = 0; i < 16; i++) M[i] = dv.getUint32(off + i * 4, true);
+      var A = a0, B = b0, C = c0, D = d0;
+      for (i = 0; i < 64; i++) {
+        var F, g;
+        if (i < 16) { F = (B & C) | (~B & D); g = i; }
+        else if (i < 32) { F = (D & B) | (~D & C); g = (5 * i + 1) % 16; }
+        else if (i < 48) { F = B ^ C ^ D; g = (3 * i + 5) % 16; }
+        else { F = C ^ (B | ~D); g = (7 * i) % 16; }
+        F = (F + A + K[i] + M[g]) >>> 0;
+        A = D; D = C; C = B;
+        var r = R[(i >> 4) * 4 + (i & 3)];
+        B = (B + ((F << r) | (F >>> (32 - r)))) >>> 0;
+      }
+      a0 = (a0 + A) >>> 0; b0 = (b0 + B) >>> 0; c0 = (c0 + C) >>> 0; d0 = (d0 + D) >>> 0;
+    }
+    var out = new Uint8Array(16), ov = new DataView(out.buffer);
+    ov.setUint32(0, a0, true); ov.setUint32(4, b0, true); ov.setUint32(8, c0, true); ov.setUint32(12, d0, true);
+    return out;
+  }
+  // the engine stores each 4-byte group of the md5 reversed
+  function wordSwap(d) {
+    var o = new Uint8Array(16);
+    for (var i = 0; i < 16; i += 4) { o[i] = d[i + 3]; o[i + 1] = d[i + 2]; o[i + 2] = d[i + 1]; o[i + 3] = d[i]; }
+    return o;
+  }
+  function hex(a) { var s = ""; for (var i = 0; i < a.length; i++) s += (a[i] < 16 ? "0" : "") + a[i].toString(16); return s; }
+  // undoes the engine's file scrambling (same steps as the engine's own reader)
+  function rsdkDecrypt(raw, size) {
+    var A = wordSwap(md5(new TextEncoder().encode(String(size))));
+    var B = wordSwap(md5(new TextEncoder().encode(String((size >>> 1) + 1))));
+    var sNo = (size & 0x1FC) >> 2, posA = 0, posB = 8, swap = 0;
+    var out = new Uint8Array(raw.length);
+    function mulhi(a, b) { return Math.floor(a * b / 0x100000000); }
+    for (var i = 0; i < raw.length; i++) {
+      var d = B[posB] ^ sNo ^ raw[i];
+      if (swap) d = ((d << 4) + (d >> 4)) & 0xFF;
+      d ^= A[posA];
+      out[i] = d & 0xFF;
+      posA++; posB++;
+      if (posA <= 0x0F) {
+        if (posB > 0x0C) { posB = 0; swap ^= 1; }
+      } else if (posB <= 0x08) {
+        posA = 0; swap ^= 1;
+      } else {
+        sNo = (sNo + 2) & 0x7F;
+        var k1 = mulhi(0xAAAAAAAB, sNo), k2 = mulhi(0x24924925, sNo);
+        var t1 = k2 + Math.floor((sNo - k2) / 2), t2 = Math.floor(k1 / 8) * 3;
+        if (swap) { swap = 0; posA = sNo - Math.floor(t1 / 4) * 7; posB = sNo - t2 * 4 + 2; }
+        else { swap = 1; posB = sNo - Math.floor(t1 / 4) * 7; posA = sNo - t2 * 4 + 3; }
+      }
+    }
+    return out;
+  }
+  // reads the game's name out of GameConfig.bin and works out which game the file is
+  async function detectGame(file) {
+    var head = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+    var magic = "RSDKvB", ok = head.length === 8;
+    for (var i = 0; ok && i < 6; i++) ok = head[i] === magic.charCodeAt(i);
+    if (!ok) throw new Error(BAD_FILE);
+    var count = head[6] | (head[7] << 8);
+    var dir = new Uint8Array(await file.slice(8, 8 + count * 24).arrayBuffer());
+    var want = hex(wordSwap(md5(new TextEncoder().encode("data/game/gameconfig.bin"))));
+    for (var f = 0; f < count; f++) {
+      var o = f * 24;
+      if (hex(dir.subarray(o, o + 16)) !== want) continue;
+      var dvw = new DataView(dir.buffer, dir.byteOffset + o + 16, 8);
+      var off = dvw.getUint32(0, true), raw = dvw.getUint32(4, true);
+      var enc = (raw & 0x80000000) !== 0, size = raw & 0x7FFFFFFF;
+      var bytes = new Uint8Array(await file.slice(off, off + size).arrayBuffer());
+      if (enc) bytes = rsdkDecrypt(bytes, size);
+      var len = bytes[0], name = "";
+      for (var c = 1; c <= len && c < bytes.length; c++) name += String.fromCharCode(bytes[c]);
+      var game = null;
+      if (/\b2\b/.test(name)) game = "s2";
+      else if (/\b1\b/.test(name)) game = "s1";
+      else if (/sonic/i.test(name) && !/\d/.test(name)) game = "s1";
+      return { game: game, name: name };
+    }
+    return { game: null, name: "" };
+  }
+  // --- game detection (end) ---
+
+  // ---- saving to IndexedDB ----
   function syncToDisk() {
     if (!FS) return Promise.resolve();
     if (syncing) { syncAgain = true; return Promise.resolve(); }
@@ -145,27 +285,78 @@
     document.addEventListener("visibilitychange", function () { if (document.hidden) syncToDisk(); });
     window.addEventListener("pagehide", syncToDisk);
   }
+  // loads a game's saved files from IndexedDB into memory
+  async function mountGame(id) {
+    if (mounted[id]) return;
+    if (!IDB) throw new Error("storage isn't available in this build, so saves can't work");
+    var dir = GAMES[id].dir;
+    try { FS.mkdir(dir); } catch (e) {}
+    FS.mount(IDB, {}, dir);
+    mounted[id] = true;
+    var err = await new Promise(function (resolve) {
+      var done = false;
+      var timer = setTimeout(function () { if (!done) { done = true; resolve("storage did not respond"); } }, 6000);
+      FS.syncfs(true, function (e) { if (!done) { done = true; clearTimeout(timer); resolve(e || null); } });
+    });
+    if (err) diagLog("could not load saved data for " + GAMES[id].name + ": " + err);
+  }
+  // the engine always looks in /data, so point /data at the chosen game's folder
+  function linkData(id) {
+    try { FS.unlink("/data"); } catch (e) {}
+    try { FS.rmdir("/data"); } catch (e) {}
+    FS.symlink(GAMES[id].dir, "/data");
+  }
 
-  // ui
+  // ---- ui ----
+  function renderStored(ids) {
+    var list = $("storedList"); list.textContent = "";
+    ids.forEach(function (id) {
+      var row = document.createElement("div"); row.className = "stored";
+      var b = document.createElement("button"); b.textContent = "play " + GAMES[id].name;
+      b.addEventListener("click", function () { launch(id, null); });
+      var f = document.createElement("button"); f.className = "link"; f.textContent = "forget rsdk";
+      f.addEventListener("click", function () { forget(id); });
+      row.appendChild(b); row.appendChild(f); list.appendChild(row);
+    });
+  }
   function refreshUI() {
     var ready = runtimeReady && FS;
-    if (ready) { try { hasStored = FS.analyzePath(DATA_PATH).exists; } catch (e) { hasStored = false; } }
-    $("rememberedArea").classList.toggle("hidden", !(ready && hasStored && !picked));
-    $("pickArea").classList.toggle("hidden", !!(ready && hasStored && !picked));
-    $("forget").classList.toggle("hidden", !(ready && hasStored));
+    var stored = getStored();
+    var ids = Object.keys(GAMES).filter(function (id) { return stored[id]; });
+    renderStored(ready ? ids : []);
+    $("storedArea").classList.toggle("hidden", !(ready && ids.length));
     var play = $("play");
-    if (!ready) { play.textContent = "Loading…"; play.disabled = true; return; }
-    play.textContent = "Play";
-    play.disabled = !(picked || hasStored);
+    play.classList.toggle("hidden", ready && !picked && ids.length > 0); // the stored game's own button is enough
+    if (!ready) { play.textContent = "loadin…"; play.disabled = true; return; }
+    if (picked && pickedGame) { play.textContent = "play " + GAMES[pickedGame].name; play.disabled = false; }
+    else { play.textContent = "play"; play.disabled = true; }
+  }
+  function setBusy() {
+    $("play").disabled = true;
+    Array.prototype.forEach.call(document.querySelectorAll("#storedList button"), function (b) { b.disabled = true; });
   }
 
-  function setFile(f) {
+  async function setFile(f) {
     if (!f) return;
-    picked = f;
+    picked = f; pickedGame = null;
     $("fileName").textContent = f.name + "  (" + (f.size / 1048576).toFixed(1) + " MB)";
-    status("");
+    $("whichGame").classList.add("hidden");
+    status("checking which game this is…");
+    try {
+      var info = await detectGame(f);
+      if (picked !== f) return; // they picked something else meanwhile
+      status("");
+      if (info.game) { pickedGame = info.game; $("fileName").textContent += "  -  " + GAMES[info.game].name; }
+      else { $("whichGame").classList.remove("hidden"); }
+    } catch (e) {
+      picked = null; $("fileName").textContent = "";
+      status(String(e && e.message || e), true);
+    }
     refreshUI();
   }
+  [["pickS1", "s1"], ["pickS2", "s2"]].forEach(function (p) {
+    $(p[0]).addEventListener("click", function () { pickedGame = p[1]; $("whichGame").classList.add("hidden"); refreshUI(); });
+  });
 
   $("drop").addEventListener("click", function () { $("file").click(); });
   $("drop").addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); } });
@@ -178,11 +369,28 @@
   });
   $("drop").addEventListener("drop", function (e) { setFile(e.dataTransfer.files[0]); });
 
-  $("forget").addEventListener("click", function () {
-    try { FS.unlink(DATA_PATH); } catch (e) {}
-    picked = null; $("fileName").textContent = "";
-    syncToDisk().then(function () { status("Stored Data.rsdk removed."); refreshUI(); });
-  });
+  // removes the stored rsdk for one game (its saves are kept)
+  async function forget(id) {
+    setBusy();
+    try {
+      await mountGame(id);
+      try { FS.unlink(GAMES[id].dir + "/Data.rsdk"); } catch (e) {}
+      await syncToDisk();
+    } catch (e) { console.warn(e); }
+    setStored(id, false);
+    status("removed your stored " + GAMES[id].name + " rsdk (your saves are kept)");
+    refreshUI();
+  }
+
+  // credits dialog
+  function showCredits(on) {
+    $("credits").classList.toggle("hidden", !on);
+    if (on) $("creditsClose").focus(); else $("creditsBtn").focus();
+  }
+  $("creditsBtn").addEventListener("click", function () { showCredits(true); });
+  $("creditsClose").addEventListener("click", function () { showCredits(false); });
+  $("credits").addEventListener("click", function (e) { if (e.target === $("credits")) showCredits(false); });
+  window.addEventListener("keydown", function (e) { if (e.key === "Escape" && !$("credits").classList.contains("hidden")) showCredits(false); });
 
   //fullscreen button
   function toggleFullscreen() {
@@ -199,20 +407,28 @@
   });
 
   // starting the game
-  $("play").addEventListener("click", async function () {
-    $("play").disabled = true;
+  async function launch(id, file) {
+    setBusy();
     try {
-      if (picked) {
-        status("Reading...");
-        var buf = new Uint8Array(await picked.arrayBuffer());
-        var magic = "RSDKvB";
-        var ok = buf.length > 1048576;
+      status("loadin your saves…");
+      await mountGame(id);
+      var path = GAMES[id].dir + "/Data.rsdk";
+      if (file) {
+        status("reading…");
+        var buf = new Uint8Array(await file.arrayBuffer());
+        var magic = "RSDKvB", ok = buf.length > 1048576;
         for (var i = 0; ok && i < magic.length; i++) ok = buf[i] === magic.charCodeAt(i);
-        if (!ok) throw new Error("that aint it, man. (wrong header). please choose the correct rsdk file from either Sonic 1 or Sonic 2");
-        FS.writeFile(DATA_PATH, buf);
+        if (!ok) throw new Error(BAD_FILE);
+        FS.writeFile(path, buf);
         status("Saving your copy, please hold…");
         await syncToDisk();
+        setStored(id, true);
+      } else if (!FS.analyzePath(path).exists) {
+        setStored(id, false);
+        throw new Error("your stored " + GAMES[id].name + " rsdk is gone, please choose it again");
       }
+      linkData(id);
+      if (!FS.analyzePath("/data/Data.rsdk").exists) throw new Error("couldn't point the game at your save folder (see the box below)");
       status("");
       $("setup").classList.add("hidden");
       $("stage").classList.remove("hidden");
@@ -224,9 +440,10 @@
       console.error(err);
       if (started) { started = false; $("stage").classList.add("hidden"); $("setup").classList.remove("hidden"); }
       status(String(err && err.message || err), true);
-      $("play").disabled = false;
+      refreshUI();
     }
-  });
+  }
+  $("play").addEventListener("click", function () { if (picked && pickedGame) launch(pickedGame, picked); });
 
   // emscripten module configuration
   window.Module = {
@@ -243,17 +460,8 @@
       try {
         FS = Module.FS || window.FS;
         if (!FS) throw new Error("FS is not available (the build did not export it)");
-        try { FS.mkdir(DATA_DIR); } catch (e) {}
-        var IDB = Module.IDBFS || (FS.filesystems && FS.filesystems.IDBFS) || window.IDBFS;
-        if (!IDB) { diagLog("IndexedDB storage is not available in this build: saves are disabled."); return; }
-        FS.mount(IDB, {}, DATA_DIR);
-        var add = Module.addRunDependency || window.addRunDependency;
-        var del = Module.removeRunDependency || window.removeRunDependency;
-        var finished = false;
-        function done(msg) { if (finished) return; finished = true; diagLog(msg); del("idbfs-load"); }
-        add("idbfs-load");
-        setTimeout(function () { done("Saved-data storage did not respond: continuing without saved data."); }, 6000);
-        FS.syncfs(true, function (err) { done(err ? "Could not load saved data: " + err : ""); });
+        IDB = Module.IDBFS || (FS.filesystems && FS.filesystems.IDBFS) || window.IDBFS;
+        if (!IDB) diagLog("IndexedDB storage is not available in this build: saves are disabled.");
       } catch (e) {
         diagLog("Startup error: " + e.message);
         status("Startup error: " + e.message, true);

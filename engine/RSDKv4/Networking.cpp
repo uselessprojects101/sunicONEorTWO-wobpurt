@@ -1,5 +1,5 @@
 #include "RetroEngine.hpp"
-#if RETRO_USE_NETWORKING
+#if RETRO_USE_NETWORKING && !defined(__EMSCRIPTEN__) // WEB-PORT:net-desktop-off
 
 #include <cstdlib>
 #include <deque>

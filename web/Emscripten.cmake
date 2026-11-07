@@ -34,3 +34,6 @@ target_link_options(RetroEngine PRIVATE
 )
 
 set_target_properties(RetroEngine PROPERTIES LINK_DEPENDS "${RETRO_WEB_SHELL}")
+
+# multiplayer over WebSockets (the desktop UDP code is skipped on the web)
+target_sources(RetroEngine PRIVATE ${CMAKE_SOURCE_DIR}/RSDKv4/NetworkingWeb.cpp)

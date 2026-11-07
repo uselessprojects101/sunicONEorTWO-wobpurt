@@ -1,0 +1,9 @@
+{
+  "name": "rsdk-web-relay",
+  "version": "1.0.0",
+  "description": "Room-code relay for the RSDKv4 web port (2-player VS)",
+  "main": "relay.js",
+  "scripts": { "start": "node relay.js", "test": "node selftest.js" },
+  "dependencies": { "ws": "^8.18.0" },
+  "license": "MIT"
+}

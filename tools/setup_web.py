@@ -29,6 +29,8 @@ if not (ENGINE / "CMakeLists.txt").exists():
 
 print("Copying platforms/Emscripten.cmake")
 shutil.copyfile(ROOT / "web" / "Emscripten.cmake", ENGINE / "platforms" / "Emscripten.cmake")
+print("Copying RSDKv4/NetworkingWeb.cpp")
+shutil.copyfile(ROOT / "web" / "NetworkingWeb.cpp", ENGINE / "RSDKv4" / "NetworkingWeb.cpp")
 
 # 1. OpenGL headers: Emscripten has no GLEW, use its own GL headers
 patch("RSDKv4/RetroEngine.hpp",
@@ -205,5 +207,41 @@ patch("RSDKv4/Drawing.cpp",
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 #endif
 """, "gl-version")
+
+# 8. Multiplayer: the desktop networking code (UDP + threads) can't run in a browser.
+#    Switch it off for the web build and use web/NetworkingWeb.cpp (WebSockets) instead.
+patch("RSDKv4/Networking.cpp",
+"""#include "RetroEngine.hpp"
+#if RETRO_USE_NETWORKING
+""",
+"""#include "RetroEngine.hpp"
+#if RETRO_USE_NETWORKING && !defined(__EMSCRIPTEN__) // WEB-PORT:net-desktop-off
+""", "net-desktop-off")
+
+patch("RSDKv4/Networking.hpp",
+"""#include <thread>
+#include <memory>
+""",
+"""#ifndef __EMSCRIPTEN__ // WEB-PORT:net-header
+#include <thread>
+#endif
+#include <memory>
+""", "net-header")
+
+# the browser hands us packets once per frame
+patch("RSDKv4/RetroEngine.cpp",
+"""static void EmscriptenFrame()
+{
+    double now = emscripten_get_now();""",
+"""#if RETRO_USE_NETWORKING
+void NetworkWebPoll(); // WEB-PORT:net-poll
+#endif
+
+static void EmscriptenFrame()
+{
+#if RETRO_USE_NETWORKING
+    NetworkWebPoll();
+#endif
+    double now = emscripten_get_now();""", "net-poll")
 
 print("Done.")

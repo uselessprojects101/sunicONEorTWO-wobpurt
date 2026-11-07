@@ -6,3 +6,5 @@ Sonic2_2013_RSDKv4/
 build/
 *.exe
 *.dll
+node_modules/
+*:Zone.Identifier

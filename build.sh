@@ -15,7 +15,7 @@ emcmake cmake -S engine -B build \
   -DCMAKE_BUILD_TYPE=Release \
   -DRETRO_OUTPUT_NAME=index \
   -DRETRO_MOD_LOADER=OFF \
-  -DRETRO_NETWORKING=OFF \
+  -DRETRO_NETWORKING=ON \
   -DRETRO_USE_HW_RENDER=ON \
   -DRETRO_DISABLE_PLUS=ON
 cmake --build build -j"$(nproc)"
