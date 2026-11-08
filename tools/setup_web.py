@@ -257,4 +257,34 @@ else:
     shell_path.write_text(shell, encoding="utf-8")
     print("  applied: page-net-scripts")
 
+# 10. Menu/3D shading. The engine puts its light at the camera as a point light (0,0,0,1).
+#     Emscripten's GL emulation treats the position as a DIRECTION, so that light pointed nowhere
+#     and every surface came out flat and dim. This engine's camera looks down +z (see
+#     SetPerspectiveMatrix), so a light shining from the viewer has direction (0,0,-1).
+#     ?lightz=1 on the page address flips it, for testing without rebuilding.
+LIGHT_OLD = """    float lightPos[4]     = { 0.0, 0.0, 0.0, 1.0 };
+"""
+LIGHT_V1 = """#ifdef __EMSCRIPTEN__ // WEB-PORT:light-dir
+    float lightPos[4]     = { 0.0, 0.0, 1.0, 0.0 };
+#else
+    float lightPos[4]     = { 0.0, 0.0, 0.0, 1.0 };
+#endif
+"""
+LIGHT_V2 = """#ifdef __EMSCRIPTEN__ // WEB-PORT:light-dir
+    // direction the light shines FROM, in eye space. This engine looks down +z, so -z is "from the viewer".
+    // Try ?lightz=1 on the page address to test the other way.
+    float lightZ          = (float)EM_ASM_DOUBLE({ var v = parseFloat(new URLSearchParams(location.search).get("lightz")); return isNaN(v) ? -1 : v; });
+    float lightPos[4]     = { 0.0, 0.0, lightZ, 0.0 };
+#else
+    float lightPos[4]     = { 0.0, 0.0, 0.0, 1.0 };
+#endif
+"""
+_dp = ENGINE / "RSDKv4" / "Drawing.cpp"
+_dt = _dp.read_text(encoding="utf-8")
+if LIGHT_V1 in _dt:   # first version of this fix (wrong direction): upgrade it
+    _dp.write_text(_dt.replace(LIGHT_V1, LIGHT_V2, 1), encoding="utf-8")
+    print("  applied: light-dir (upgraded)")
+else:
+    patch("RSDKv4/Drawing.cpp", LIGHT_OLD, LIGHT_V2, "light-dir")
+
 print("Done.")

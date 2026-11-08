@@ -276,7 +276,14 @@ int InitRenderDevice()
 
     float lightAmbient[4] = { 2.0, 2.0, 2.0, 1.0 };
     float lightDiffuse[4] = { 1.0, 1.0, 1.0, 1.0 };
+#ifdef __EMSCRIPTEN__ // WEB-PORT:light-dir
+    // direction the light shines FROM, in eye space. This engine looks down +z, so -z is "from the viewer".
+    // Try ?lightz=1 on the page address to test the other way.
+    float lightZ          = (float)EM_ASM_DOUBLE({ var v = parseFloat(new URLSearchParams(location.search).get("lightz")); return isNaN(v) ? -1 : v; });
+    float lightPos[4]     = { 0.0, 0.0, lightZ, 0.0 };
+#else
     float lightPos[4]     = { 0.0, 0.0, 0.0, 1.0 };
+#endif
 
     glLightfv(GL_LIGHT0, GL_AMBIENT, lightAmbient);
     glLightfv(GL_LIGHT0, GL_DIFFUSE, lightDiffuse);
