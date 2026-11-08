@@ -1,6 +1,3 @@
-# Emscripten (web) platform file for the RSDKv4 decompilation.
-# picked by engine/CMakeLists.txt building with emcmake,
-
 add_executable(RetroEngine ${RETRO_FILES})
 
 set_target_properties(RetroEngine PROPERTIES
@@ -9,13 +6,10 @@ set_target_properties(RetroEngine PROPERTIES
     SUFFIX ".html"
 )
 
-# custom page (file picker, fullscreen canvas, save syncing)
 set(RETRO_WEB_SHELL "${CMAKE_SOURCE_DIR}/../web/shell.html" CACHE FILEPATH "HTML shell for the web build")
 
-# engine looks for the rsdk, settings.ini and save files in BASE_PATH.
 target_compile_definitions(RetroEngine PRIVATE BASE_PATH="/data/")
 
-# SDL2 + ogg + vorbis come from emscripten's built-in ports
 set(WEB_PORT_FLAGS -sUSE_SDL=2 -sUSE_OGG=1 -sUSE_VORBIS=1)
 
 target_compile_options(RetroEngine PRIVATE ${WEB_PORT_FLAGS})
@@ -35,5 +29,4 @@ target_link_options(RetroEngine PRIVATE
 
 set_target_properties(RetroEngine PROPERTIES LINK_DEPENDS "${RETRO_WEB_SHELL}")
 
-# multiplayer over WebSockets (the desktop UDP code is skipped on the web)
 target_sources(RetroEngine PRIVATE ${CMAKE_SOURCE_DIR}/RSDKv4/NetworkingWeb.cpp)

@@ -1,16 +1,3 @@
-// Relay server for the RSDKv4 web port.
-// Speaks the same packet format as the original 2-player VS server, but over WebSockets.
-//
-//   node relay.js                       (port 8787)
-//   PORT=9000 node relay.js
-//   ALLOWED_ORIGINS=https://you.github.io node relay.js     (recommended when public)
-//
-// Packet layout (little endian), 16-byte header then payload:
-//   0      u8   header
-//   1..7   char game name, e.g. "SONIC2"
-//   8      u32  player id
-//   12     u32  room code
-//   16..   payload (i32 type, i32 data[...])
 "use strict";
 const http = require("http");
 const crypto = require("crypto");
@@ -30,7 +17,7 @@ const HEADER = 16;
 
 const clients = new Set();
 const byId = new Map();
-const rooms = new Map(); // code -> { code, host, guest }
+const rooms = new Map();
 
 function log(...a) { console.log(new Date().toISOString(), ...a); }
 
@@ -71,7 +58,6 @@ function partnerOf(client) {
   return r.host === client ? r.guest : r.host;
 }
 
-// leaves and closes the client's room, telling the other player
 function leaveRoom(client) {
   if (!client.room) return;
   const r = rooms.get(client.room);
@@ -88,7 +74,6 @@ function leaveRoom(client) {
 
 function newRoomCode(settings) {
   for (let i = 0; i < 100; i++) {
-    // The game reads the match settings out of bits 4-11 of the code (mask 0xFF0).
     const code = (((crypto.randomInt(1, 1 << 20)) << 12) | (settings & 0xff0)) >>> 0;
     if (!rooms.has(code)) return code;
   }
@@ -102,7 +87,6 @@ function onPacket(client, buf) {
   const roomField = buf.readUInt32LE(12);
   client.game = buf.toString("latin1", 1, 8).replace(/\0.*$/, "");
 
-  // 1) hello: get a player id
   if (header === CL.REQUEST_CODE && roomField === HELLO_ROOM) {
     if (!client.id) {
       client.id = randomId();
@@ -112,11 +96,10 @@ function onPacket(client, buf) {
     return;
   }
 
-  // everything else must come from a client that said hello
   if (!client.id || player !== client.id) return;
 
   switch (header) {
-    case CL.REQUEST_CODE: { // host a new room
+    case CL.REQUEST_CODE: {
       if (rooms.size >= MAX_ROOMS) { send(client, makeSimple(SV.NO_ROOM, client.game, client.id, 0)); return; }
       leaveRoom(client);
       const settings = buf.length >= HEADER + 8 ? buf.readInt32LE(HEADER + 4) : 0;
@@ -131,12 +114,12 @@ function onPacket(client, buf) {
     case CL.JOIN: {
       const r = rooms.get(roomField);
       if (!r || r.host === client) { send(client, makeSimple(SV.NO_ROOM, client.game, client.id, roomField)); return; }
-      if (r.guest) { send(client, makeCodes(client.game, client.id, roomField, 3, 0)); return; } // full
+      if (r.guest) { send(client, makeCodes(client.game, client.id, roomField, 3, 0)); return; }
       leaveRoom(client);
       r.guest = client;
       client.room = r.code;
-      send(client, makeCodes(client.game, client.id, r.code, 2, r.host.id)); // tells the guest who the host is
-      send(r.host, makeSimple(SV.NEW_PLAYER, client.game, client.id, r.code)); // tells the host a guest arrived
+      send(client, makeCodes(client.game, client.id, r.code, 2, r.host.id));
+      send(r.host, makeSimple(SV.NEW_PLAYER, client.game, client.id, r.code));
       log("room joined", r.code.toString(16).padStart(8, "0"));
       return;
     }
@@ -152,7 +135,7 @@ function onPacket(client, buf) {
       return;
     }
     case CL.QUERY_VERIFICATION:
-      return; // not needed: WebSockets are reliable
+      return;
     case CL.LEAVE:
       leaveRoom(client);
       return;
@@ -193,7 +176,6 @@ wss.on("connection", (ws) => {
   ws.on("error", () => {});
 });
 
-// drop dead connections
 setInterval(() => {
   for (const c of clients) {
     if (!c.alive) { c.ws.terminate(); continue; }

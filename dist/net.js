@@ -1,17 +1,3 @@
-// Multiplayer transport for the Sonic web port.
-//
-// The game's C++ code (NetworkingWeb.cpp) talks to window.RSDKNet. It sends and receives the
-// same packets the original 2-player VS server used. Two ways of carrying them:
-//
-//   "p2p"   (default) players connect straight to each other with WebRTC. A small public
-//           service (PeerJS cloud) only introduces them. Nothing to host.
-//           This file plays the part of the old server for the two players.
-//   "relay" players connect to a relay server over a WebSocket (see /server).
-//
-// Settings (optional, set in the page before the game starts):
-//   window.RSDK_NET_MODE      = "p2p" | "relay"
-//   window.RSDK_RELAY_URL     = "wss://your-relay.example.com"      (relay mode)
-//   window.RSDK_PEER_OPTIONS  = { host: "...", port: 9000, ... }     (p2p mode, own PeerJS server)
 (function () {
   "use strict";
 
@@ -20,8 +6,8 @@
   var SV = { CODES: 0x00, NEW_PLAYER: 0x01, DATA: 0x10, DATA_VERIFIED: 0x11, NO_ROOM: 0x81, LEAVE: 0xff };
   var HELLO_ROOM = 0x1f2f3f4f;
   var PEER_PREFIX = "rsdkweb-";
-  var FRAME_HELLO = 0xfe; // sent once by each side after connecting: carries the sender's player id
-  var FRAME_FULL = 0xfd;  // host -> a third player: room is full
+  var FRAME_HELLO = 0xfe;
+  var FRAME_FULL = 0xfd;
   var CONNECT_TIMEOUT_MS = 15000;
 
   function cfg(name, dflt) { var v = window[name]; return v === undefined ? dflt : v; }
@@ -39,7 +25,6 @@
     return s;
   }
 
-  // packets the game expects from the server
   function makeCodes(game, player, room, type, data0) {
     var b = new Uint8Array(HEADER + 8), dv = new DataView(b.buffer);
     b[0] = SV.CODES;
@@ -56,16 +41,13 @@
     return b;
   }
 
-  // =====================================================================================
-  //  Direct player-to-player mode
-  // =====================================================================================
   function P2P() {
     this.rx = [];
-    this.st = 2;      // 1 = connecting, 2 = ready, 3 = closed/failed
-    this.id = 0;      // our player id
+    this.st = 2;
+    this.id = 0;
     this.game = "";
     this.room = 0;
-    this.role = null; // "host" | "guest"
+    this.role = null;
     this.peer = null;
     this.conn = null;
     this.partnerId = 0;
@@ -86,14 +68,13 @@
   };
   P2P.prototype.push = function (buf) { if (this.rx.length < 512) this.rx.push(buf); };
 
-  // from the game
   P2P.prototype.send = function (buf) {
     if (buf.length < HEADER) return;
     var dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
     var header = buf[0], player = dv.getUint32(8, true), room = dv.getUint32(12, true);
     this.game = latin1(buf, 1, 8);
 
-    if (header === CL.REQUEST_CODE && room === HELLO_ROOM) { // hello: hand out a player id
+    if (header === CL.REQUEST_CODE && room === HELLO_ROOM) {
       if (!this.id) this.id = randomId();
       this.push(makeCodes(this.game, this.id, 0, 0, 0));
       return;
@@ -109,12 +90,10 @@
     }
   };
 
-  // ---- hosting ----
   P2P.prototype.host = function (settings, attempt) {
     var self = this, Peer = this.PeerClass();
     this.teardown();
     if (!Peer) { this.st = 3; return; }
-    // The game reads the match settings out of bits 4-11 of the room code (mask 0xFF0).
     var code = (((rand32() & 0xfffff) << 12) | (settings & 0xff0)) >>> 0;
     if (!code) code = 0x1000;
     var peer = new Peer(PEER_PREFIX + hex8(code), this.peerOptions());
@@ -125,7 +104,7 @@
       self.push(makeCodes(self.game, self.id, code, 1, 0));
     });
     peer.on("connection", function (conn) { if (self.peer === peer) self.onIncoming(conn); });
-    peer.on("disconnected", function () { // lost the introduction service; existing connections keep working
+    peer.on("disconnected", function () {
       if (self.peer === peer && !peer.destroyed && !self.conn) { try { peer.reconnect(); } catch (e) {} }
     });
     peer.on("error", function (e) {
@@ -137,16 +116,14 @@
   };
   P2P.prototype.onIncoming = function (conn) {
     var self = this;
-    if (this.conn) { // already have a guest
+    if (this.conn) {
       conn.on("open", function () { try { conn.send(new Uint8Array([FRAME_FULL])); } catch (e) {} setTimeout(function () { try { conn.close(); } catch (e) {} }, 400); });
       return;
     }
     this.conn = conn;
     this.wire(conn);
-    // the guest speaks first (their hello carries their player id); see onFrame
   };
 
-  // ---- joining ----
   P2P.prototype.join = function (code) {
     var self = this, Peer = this.PeerClass();
     this.teardown();
@@ -176,7 +153,6 @@
     this.push(makeSimple(SV.NO_ROOM, this.game, this.id, code));
   };
 
-  // ---- both roles ----
   P2P.prototype.sendHello = function (conn) {
     var b = new Uint8Array(5); b[0] = FRAME_HELLO;
     new DataView(b.buffer).setUint32(1, this.id, true);
@@ -196,10 +172,10 @@
       this.partnerId = new DataView(u8.buffer, u8.byteOffset, u8.byteLength).getUint32(1, true);
       clearTimeout(this.timer);
       if (this.role === "host") {
-        this.sendHello(conn); // answer so the guest learns our id
-        this.push(makeSimple(SV.NEW_PLAYER, this.game, this.partnerId, this.room)); // "a player joined"
+        this.sendHello(conn);
+        this.push(makeSimple(SV.NEW_PLAYER, this.game, this.partnerId, this.room));
       } else {
-        this.push(makeCodes(this.game, this.id, this.room, 2, this.partnerId)); // "you joined; the host is ..."
+        this.push(makeCodes(this.game, this.id, this.room, 2, this.partnerId));
       }
       return;
     }
@@ -210,7 +186,7 @@
   P2P.prototype.onClosed = function () {
     var partner = this.partnerId, room = this.room;
     this.conn = null; this.partnerId = 0;
-    if (partner) this.push(makeSimple(SV.LEAVE, this.game, partner, room)); // "the other player left"
+    if (partner) this.push(makeSimple(SV.LEAVE, this.game, partner, room));
   };
   P2P.prototype.forward = function (buf, header) {
     if (!this.conn || !this.partnerId || !this.conn.open) return;
@@ -231,9 +207,6 @@
   P2P.prototype.fail = function () { this.teardown(); this.st = 3; };
   P2P.prototype.close = function () { this.teardown(); this.st = 3; };
 
-  // =====================================================================================
-  //  Relay-server mode (WebSocket)
-  // =====================================================================================
   function WSRelay() {
     this.rx = []; this.tx = []; this.st = 1; this.ws = null;
     var url = cfg("RSDK_RELAY_URL", "ws://localhost:8787"), self = this;
@@ -253,9 +226,6 @@
   };
   WSRelay.prototype.close = function () { try { if (this.ws) this.ws.close(); } catch (e) {} this.st = 3; };
 
-  // =====================================================================================
-  //  What the game calls
-  // =====================================================================================
   var impl = null;
   window.RSDKNet = {
     open: function () {

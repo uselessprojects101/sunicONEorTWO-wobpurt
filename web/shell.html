@@ -13,7 +13,6 @@
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden;
     font-family: "Ubuntu Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #e8e8f0; }
 
-  /* setup screen */
   #setup { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
     padding: 24px; box-sizing: border-box; background: #000; overflow-y: auto; }
   .card { width: min(560px, 100%); margin: auto; text-align: center; }
@@ -52,7 +51,6 @@
   .hidden { display: none !important; }
   #diag { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; max-height: 35vh; overflow: auto; margin: 0; padding: 10px 14px; background: rgba(10,10,20,.92); font: 12px/1.45 ui-monospace, Consolas, monospace; color: #ffb0b0; white-space: pre-wrap; word-break: break-word; }
 
-  /* game */
   #stage { position: fixed; inset: 0; background: #000; }
   #canvas { display: block; width: 100% !important; height: 100% !important; object-fit: contain; outline: none; }
   #fsbtn { position: absolute; top: 10px; right: 10px; padding: 8px 12px; font-size: 13px; opacity: 0;
@@ -60,12 +58,9 @@
   #stage:hover #fsbtn, #fsbtn:focus-visible { opacity: 1; }
 </style>
 <script>
-  // multiplayer relay server. for testing on your own computer leave it as is;
-  // for a public site, put your server's address here (it must start with wss://)
   window.RSDK_RELAY_URL = "ws://localhost:8787";
 </script>
 <script>
-  // any on screen errors
   window.__diag = [];
   window.diagLog = function (m) {
     if (!m) return;
@@ -83,8 +78,6 @@
   });
 </script>
 <script>
-  // safety net for browser autoplay rules: remember every AudioContext the game
-  // creates and resume it on the first key press or click.
   (function () {
     var AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
@@ -152,7 +145,6 @@
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
-  // each game gets its own storage folder (its own rsdk copy and its own saves)
   var GAMES = {
     s1: { name: "sonic 1", dir: "/rsdkweb_s1" },
     s2: { name: "sonic 2", dir: "/rsdkweb_s2" }
@@ -163,15 +155,12 @@
 
   function status(msg, isErr) { var s = $("status"); s.textContent = msg || ""; s.className = isErr ? "err" : ""; }
 
-  // ---- which games have a stored copy (a note kept in localStorage) ----
   function getStored() { try { return JSON.parse(localStorage.getItem("rsdkweb_stored") || "{}") || {}; } catch (e) { return {}; } }
   function setStored(id, on) {
     var s = getStored(); if (on) s[id] = true; else delete s[id];
     try { localStorage.setItem("rsdkweb_stored", JSON.stringify(s)); } catch (e) {}
   }
 
-  // --- game detection (start) ---
-  // md5 (the engine looks files up by the md5 of their lowercase path)
   function md5(msg) {
     var K = new Uint32Array(64), i;
     for (i = 0; i < 64; i++) K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 0x100000000);
@@ -203,14 +192,12 @@
     ov.setUint32(0, a0, true); ov.setUint32(4, b0, true); ov.setUint32(8, c0, true); ov.setUint32(12, d0, true);
     return out;
   }
-  // the engine stores each 4-byte group of the md5 reversed
   function wordSwap(d) {
     var o = new Uint8Array(16);
     for (var i = 0; i < 16; i += 4) { o[i] = d[i + 3]; o[i + 1] = d[i + 2]; o[i + 2] = d[i + 1]; o[i + 3] = d[i]; }
     return o;
   }
   function hex(a) { var s = ""; for (var i = 0; i < a.length; i++) s += (a[i] < 16 ? "0" : "") + a[i].toString(16); return s; }
-  // undoes the engine's file scrambling (same steps as the engine's own reader)
   function rsdkDecrypt(raw, size) {
     var A = wordSwap(md5(new TextEncoder().encode(String(size))));
     var B = wordSwap(md5(new TextEncoder().encode(String((size >>> 1) + 1))));
@@ -237,7 +224,6 @@
     }
     return out;
   }
-  // reads the game's name out of GameConfig.bin and works out which game the file is
   async function detectGame(file) {
     var head = new Uint8Array(await file.slice(0, 8).arrayBuffer());
     var magic = "RSDKvB", ok = head.length === 8;
@@ -264,9 +250,7 @@
     }
     return { game: null, name: "" };
   }
-  // --- game detection (end) ---
 
-  // ---- saving to IndexedDB ----
   function syncToDisk() {
     if (!FS) return Promise.resolve();
     if (syncing) { syncAgain = true; return Promise.resolve(); }
@@ -285,7 +269,6 @@
     document.addEventListener("visibilitychange", function () { if (document.hidden) syncToDisk(); });
     window.addEventListener("pagehide", syncToDisk);
   }
-  // loads a game's saved files from IndexedDB into memory
   async function mountGame(id) {
     if (mounted[id]) return;
     if (!IDB) throw new Error("storage isn't available in this build, so saves can't work");
@@ -300,14 +283,12 @@
     });
     if (err) diagLog("could not load saved data for " + GAMES[id].name + ": " + err);
   }
-  // the engine always looks in /data, so point /data at the chosen game's folder
   function linkData(id) {
     try { FS.unlink("/data"); } catch (e) {}
     try { FS.rmdir("/data"); } catch (e) {}
     FS.symlink(GAMES[id].dir, "/data");
   }
 
-  // ---- ui ----
   function renderStored(ids) {
     var list = $("storedList"); list.textContent = "";
     ids.forEach(function (id) {
@@ -326,7 +307,7 @@
     renderStored(ready ? ids : []);
     $("storedArea").classList.toggle("hidden", !(ready && ids.length));
     var play = $("play");
-    play.classList.toggle("hidden", ready && !picked && ids.length > 0); // the stored game's own button is enough
+    play.classList.toggle("hidden", ready && !picked && ids.length > 0);
     if (!ready) { play.textContent = "loadin…"; play.disabled = true; return; }
     if (picked && pickedGame) { play.textContent = "play " + GAMES[pickedGame].name; play.disabled = false; }
     else { play.textContent = "play"; play.disabled = true; }
@@ -344,7 +325,7 @@
     status("checking which game this is…");
     try {
       var info = await detectGame(f);
-      if (picked !== f) return; // they picked something else meanwhile
+      if (picked !== f) return;
       status("");
       if (info.game) { pickedGame = info.game; $("fileName").textContent += "  -  " + GAMES[info.game].name; }
       else { $("whichGame").classList.remove("hidden"); }
@@ -369,7 +350,6 @@
   });
   $("drop").addEventListener("drop", function (e) { setFile(e.dataTransfer.files[0]); });
 
-  // removes the stored rsdk for one game (its saves are kept)
   async function forget(id) {
     setBusy();
     try {
@@ -382,7 +362,6 @@
     refreshUI();
   }
 
-  // credits dialog
   function showCredits(on) {
     $("credits").classList.toggle("hidden", !on);
     if (on) $("creditsClose").focus(); else $("creditsBtn").focus();
@@ -392,7 +371,6 @@
   $("credits").addEventListener("click", function (e) { if (e.target === $("credits")) showCredits(false); });
   window.addEventListener("keydown", function (e) { if (e.key === "Escape" && !$("credits").classList.contains("hidden")) showCredits(false); });
 
-  //fullscreen button
   function toggleFullscreen() {
     if (document.fullscreenElement) { document.exitFullscreen(); return; }
     var el = $("stage");
@@ -401,12 +379,10 @@
   $("fsbtn").addEventListener("click", toggleFullscreen);
   $("canvas").addEventListener("dblclick", toggleFullscreen);
 
-  // keep arrow keys and space from scrolling or tabbing away while playing
   window.addEventListener("keydown", function (e) {
     if (started && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " ", "Tab"].indexOf(e.key) >= 0) e.preventDefault();
   });
 
-  // starting the game
   async function launch(id, file) {
     setBusy();
     try {
@@ -445,7 +421,6 @@
   }
   $("play").addEventListener("click", function () { if (picked && pickedGame) launch(pickedGame, picked); });
 
-  // emscripten module configuration
   window.Module = {
     noInitialRun: true,
     canvas: $("canvas"),

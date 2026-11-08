@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Builds the web version into ./dist
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -25,7 +24,6 @@ cp build/index.html build/index.js build/index.wasm dist/
 cp web/net.js web/peerjs.min.js dist/
 touch dist/.nojekyll
 
-# GitHub Pages serves the docs/ folder
 rm -rf docs && cp -r dist docs
 
 echo

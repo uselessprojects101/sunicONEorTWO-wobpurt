@@ -1,7 +1,3 @@
-// Browser transport for the RSDKv4 2-player VS networking.
-// Replaces the UDP/asio code in Networking.cpp when building with Emscripten.
-// It keeps the same packet format; web/net.js carries the packets between the two players
-// (directly with WebRTC, or through a relay server).
 #include "RetroEngine.hpp"
 #if RETRO_USE_NETWORKING && defined(__EMSCRIPTEN__)
 
@@ -18,8 +14,6 @@ bool waitingForPing = false;
 
 static_assert(4 + sizeof(Entity) <= sizeof(ServerPacket::data), "an Entity no longer fits in one packet");
 
-// ---- JavaScript side: web/net.js (window.RSDKNet) does the real work ----
-// It either connects the two players directly (WebRTC) or talks to a relay server.
 EM_JS(void, js_net_open, (), {
     if (window.RSDKNet) window.RSDKNet.open();
     else if (window.diagLog) diagLog("Multiplayer: net.js is missing from the page");
@@ -38,7 +32,7 @@ EM_JS(int, js_net_poll, (unsigned char *dst, int maxLen), {
 });
 
 EM_JS(int, js_net_state, (), {
-    return window.RSDKNet ? window.RSDKNet.state() : 0; // 0 = none, 1 = connecting, 2 = ready, 3 = closed
+    return window.RSDKNet ? window.RSDKNet.state() : 0;
 });
 
 EM_JS(void, js_net_close, (), {
@@ -52,7 +46,7 @@ class NetworkSession
 public:
     bool running = false;
 
-    uint code    = 0; // our player id, assigned by the relay
+    uint code    = 0;
     uint partner = 0;
     uint room    = 0;
 
@@ -80,7 +74,6 @@ public:
         js_net_close();
     }
 
-    // same behaviour as the desktop version: stamp our id and room on every packet
     void write(const ServerPacket &msg, bool = false)
     {
         ServerPacket sent(msg);
@@ -116,18 +109,17 @@ public:
                     return;
                 room = read_msg_.room;
                 if (read_msg_.data.multiData.type > 2) {
-                    dcError = 3; // room is full
+                    dcError = 3;
                     leave();
                     return;
                 }
 
                 if (read_msg_.data.multiData.type - 1) {
-                    // we joined someone else's room
                     partner = *read_msg_.data.multiData.data;
                     Receive2PVSMatchCode(room);
                     return;
                 }
-                break; // we are hosting: now wait for SV_NEW_PLAYER
+                break;
             }
             case SV_NEW_PLAYER: {
                 if (partner)
@@ -138,29 +130,27 @@ public:
                 return;
             }
             case SV_DATA_VERIFIED:
-            // fallthrough
             case SV_DATA: {
                 Receive2PVSData(&read_msg_.data.multiData);
                 return;
             }
             case SV_NO_ROOM: {
                 leave();
-                dcError = 5; // room doesn't exist
+                dcError = 5;
                 return;
             }
             case SV_LEAVE: {
                 if (read_msg_.player != partner)
                     return;
                 leave();
-                dcError = 1; // other player left
+                dcError = 1;
                 return;
             }
-            default: return; // RECEIVED / VERIFY_CLEAR are not needed: WebSockets are reliable
+            default: return;
         }
     }
 
 private:
-    // Packets are 4 KB in the original format but almost empty, so only send what's used.
     void transmit(ServerPacket &pkt)
     {
         StrCopy(pkt.game, networkGame);
@@ -227,7 +217,6 @@ void SetRoomCode(int code)
 
 void SetNetworkGameName(int *a1, const char *name) { StrCopy(networkGame, name); }
 
-// Called once per browser frame (from the main loop): hand incoming packets to the game.
 void NetworkWebPoll()
 {
     std::shared_ptr<NetworkSession> s = session;
@@ -242,11 +231,10 @@ void NetworkWebPoll()
         s->handle();
     }
 
-    // connection lost or refused
     if (s->running && js_net_state() == 3) {
         s->running = false;
         if (vsPlaying) {
-            dcError   = 2; // timed out / dropped mid-match
+            dcError   = 2;
             vsPlaying = false;
         }
     }
