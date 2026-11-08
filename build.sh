@@ -22,6 +22,7 @@ cmake --build build -j"$(nproc)"
 
 rm -rf dist && mkdir -p dist
 cp build/index.html build/index.js build/index.wasm dist/
+cp web/net.js web/peerjs.min.js dist/
 touch dist/.nojekyll
 
 # GitHub Pages serves the docs/ folder

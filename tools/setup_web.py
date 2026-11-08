@@ -244,4 +244,17 @@ static void EmscriptenFrame()
 #endif
     double now = emscripten_get_now();""", "net-poll")
 
+# 9. Multiplayer: load the transport scripts in the page (web/net.js + web/peerjs.min.js).
+shell_path = ROOT / "web" / "shell.html"
+shell = shell_path.read_text(encoding="utf-8")
+if 'src="net.js"' in shell:
+    print("  already applied: page-net-scripts")
+else:
+    if shell.count("{{{ SCRIPT }}}") != 1:
+        sys.exit("ERROR: could not find {{{ SCRIPT }}} exactly once in web/shell.html.")
+    shell = shell.replace("{{{ SCRIPT }}}",
+        '<script src="peerjs.min.js"></script>\n<script src="net.js"></script>\n{{{ SCRIPT }}}', 1)
+    shell_path.write_text(shell, encoding="utf-8")
+    print("  applied: page-net-scripts")
+
 print("Done.")

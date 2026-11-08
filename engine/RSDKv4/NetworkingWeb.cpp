@@ -1,7 +1,7 @@
-// Browser (WebSocket) transport for the RSDKv4 2-player VS networking.
+// Browser transport for the RSDKv4 2-player VS networking.
 // Replaces the UDP/asio code in Networking.cpp when building with Emscripten.
-// It speaks the same packet format, but through a small relay server (see /server)
-// that creates rooms and passes packets between the two players.
+// It keeps the same packet format; web/net.js carries the packets between the two players
+// (directly with WebRTC, or through a relay server).
 #include "RetroEngine.hpp"
 #if RETRO_USE_NETWORKING && defined(__EMSCRIPTEN__)
 
@@ -18,50 +18,31 @@ bool waitingForPing = false;
 
 static_assert(4 + sizeof(Entity) <= sizeof(ServerPacket::data), "an Entity no longer fits in one packet");
 
-// ---- JavaScript side: a plain WebSocket plus two queues ----
+// ---- JavaScript side: web/net.js (window.RSDKNet) does the real work ----
+// It either connects the two players directly (WebRTC) or talks to a relay server.
 EM_JS(void, js_net_open, (), {
-    try { if (window.__rsdkNet && window.__rsdkNet.ws) window.__rsdkNet.ws.close(); } catch (e) {}
-    var url = window.RSDK_RELAY_URL || "ws://localhost:8787";
-    var n = { ws: null, rx: [], tx: [], state: 1 };
-    window.__rsdkNet = n;
-    try {
-        var ws = new WebSocket(url);
-        ws.binaryType = "arraybuffer";
-        n.ws = ws;
-        ws.onopen = function () { n.state = 2; for (var i = 0; i < n.tx.length; i++) ws.send(n.tx[i]); n.tx = []; };
-        ws.onmessage = function (e) { if (n.rx.length < 512) n.rx.push(new Uint8Array(e.data)); };
-        ws.onerror = function () { if (window.diagLog) diagLog("Multiplayer: could not reach the relay server (" + url + ")"); };
-        ws.onclose = function () { n.state = 3; };
-    } catch (e) {
-        n.state = 3;
-        if (window.diagLog) diagLog("Multiplayer: " + e.message);
-    }
+    if (window.RSDKNet) window.RSDKNet.open();
+    else if (window.diagLog) diagLog("Multiplayer: net.js is missing from the page");
 });
 
 EM_JS(void, js_net_send, (const unsigned char *ptr, int len), {
-    var n = window.__rsdkNet;
-    if (!n || n.state === 3) return;
-    var copy = HEAPU8.slice(ptr, ptr + len);
-    if (n.state === 2) n.ws.send(copy); else n.tx.push(copy);
+    if (window.RSDKNet) window.RSDKNet.send(HEAPU8.slice(ptr, ptr + len));
 });
 
 EM_JS(int, js_net_poll, (unsigned char *dst, int maxLen), {
-    var n = window.__rsdkNet;
-    if (!n || !n.rx.length) return 0;
-    var m = n.rx.shift();
+    var m = window.RSDKNet ? window.RSDKNet.poll() : null;
+    if (!m) return 0;
     var len = m.length < maxLen ? m.length : maxLen;
     HEAPU8.set(m.subarray(0, len), dst);
     return len;
 });
 
 EM_JS(int, js_net_state, (), {
-    var n = window.__rsdkNet;
-    return n ? n.state : 0; // 0 = none, 1 = connecting, 2 = open, 3 = closed
+    return window.RSDKNet ? window.RSDKNet.state() : 0; // 0 = none, 1 = connecting, 2 = ready, 3 = closed
 });
 
 EM_JS(void, js_net_close, (), {
-    var n = window.__rsdkNet;
-    if (n && n.ws) { try { n.ws.close(); } catch (e) {} n.state = 3; }
+    if (window.RSDKNet) window.RSDKNet.close();
 });
 
 static double lastTimeMs = 0;
