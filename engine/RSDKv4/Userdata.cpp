@@ -235,7 +235,7 @@ void InitUserdata()
     if (!file) {
         IniParser ini;
 
-        ini.SetBool("Dev", "DevMenu", Engine.devMenu = true);
+        ini.SetBool("Dev", "DevMenu", Engine.devMenu = false);
         ini.SetBool("Dev", "EngineDebugMode", engineDebugMode = false);
         ini.SetBool("Dev", "TxtScripts", forceUseScripts = false);
         forceUseScripts_Config = forceUseScripts;
@@ -371,7 +371,7 @@ void InitUserdata()
         IniParser ini(buffer, false);
 
         if (!ini.GetBool("Dev", "DevMenu", &Engine.devMenu))
-            Engine.devMenu = true;
+            Engine.devMenu = false;
         if (!ini.GetBool("Dev", "EngineDebugMode", &engineDebugMode))
             engineDebugMode = false;
         if (!ini.GetBool("Dev", "TxtScripts", &forceUseScripts))
