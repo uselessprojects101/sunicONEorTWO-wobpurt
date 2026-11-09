@@ -371,7 +371,7 @@ void InitUserdata()
         IniParser ini(buffer, false);
 
         if (!ini.GetBool("Dev", "DevMenu", &Engine.devMenu))
-            Engine.devMenu = false;
+            Engine.devMenu = true;
         if (!ini.GetBool("Dev", "EngineDebugMode", &engineDebugMode))
             engineDebugMode = false;
         if (!ini.GetBool("Dev", "TxtScripts", &forceUseScripts))
