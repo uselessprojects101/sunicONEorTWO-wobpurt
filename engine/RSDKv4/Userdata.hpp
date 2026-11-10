@@ -184,7 +184,7 @@ inline void LoadAchievementsMenu()
 
 void ShowAchievementsScreen();
 
-int SetLeaderboard(int *leaderboardID, int *result);
+void SetLeaderboard(int *leaderboardID, int *result);
 inline void LoadLeaderboardsMenu()
 {
 #if !RETRO_USE_ORIGINAL_CODE
