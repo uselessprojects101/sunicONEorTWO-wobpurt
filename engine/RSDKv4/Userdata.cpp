@@ -961,7 +961,7 @@ void ShowAchievementsScreen()
 #endif
 }
 
-int SetLeaderboard(int *leaderboardID, int *score)
+void SetLeaderboard(int *leaderboardID, int *score)
 {
     if (!Engine.trialMode && !debugMode) {
         // 0  = GHZ1/EHZ1
@@ -999,9 +999,9 @@ int SetLeaderboard(int *leaderboardID, int *score)
                      leaderboards[*leaderboardID].score);
         }
 #endif
-        return 1;
+        return;
     }
-    return 0;
+    return;
 }
 void ShowLeaderboardsScreen()
 {
