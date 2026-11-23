@@ -8,7 +8,7 @@ MARK = "WEB-PORT"
 def patch(relpath, old, new, label):
     p = ENGINE / relpath
     text = p.read_text(encoding="utf-8")
-    if MARK + ":" + label in text:
+    if MARK + ":" + label in text or new in text:
         print(f"  already applied: {label}")
         return
     n = text.count(old)
@@ -21,10 +21,17 @@ def patch(relpath, old, new, label):
 if not (ENGINE / "CMakeLists.txt").exists():
     sys.exit("ERROR: engine/CMakeLists.txt not found. Run this from the repo root.")
 
+cmake_path = ROOT / "web" / "Emscripten.cmake"
+cmake_text = cmake_path.read_text(encoding="utf-8")
+if "WebPatch.cpp" not in cmake_text:
+    cmake_path.write_text(cmake_text.rstrip("\n") + "\ntarget_sources(RetroEngine PRIVATE ${CMAKE_SOURCE_DIR}/RSDKv4/WebPatch.cpp)\n", encoding="utf-8")
+    print("  applied: cmake-webpatch-source")
 print("Copying platforms/Emscripten.cmake")
 shutil.copyfile(ROOT / "web" / "Emscripten.cmake", ENGINE / "platforms" / "Emscripten.cmake")
 print("Copying RSDKv4/NetworkingWeb.cpp")
 shutil.copyfile(ROOT / "web" / "NetworkingWeb.cpp", ENGINE / "RSDKv4" / "NetworkingWeb.cpp")
+print("Copying RSDKv4/WebPatch.cpp")
+shutil.copyfile(ROOT / "web" / "WebPatch.cpp", ENGINE / "RSDKv4" / "WebPatch.cpp")
 
 patch("RSDKv4/RetroEngine.hpp",
 """#else
@@ -262,5 +269,86 @@ if LIGHT_V1 in _dt:
     print("  applied: light-dir (upgraded)")
 else:
     patch("RSDKv4/Drawing.cpp", LIGHT_OLD, LIGHT_V2, "light-dir")
+
+patch("RSDKv4/Script.cpp",
+"""void LoadBytecode(int stageListID, int scriptID)
+{""",
+"""#ifdef __EMSCRIPTEN__
+void ApplyScriptPatches(const char *scriptPath, int codeStart, int codeLength);
+#endif
+
+void LoadBytecode(int stageListID, int scriptID)
+{""", "patch-decl")
+
+patch("RSDKv4/Script.cpp",
+"""        int *jumpTablePtr  = &jumpTable[jumpTablePos];
+
+        FileRead(&fileBuffer, 1);
+        int scriptCodeSize = fileBuffer;""",
+"""        int *jumpTablePtr  = &jumpTable[jumpTablePos];
+#ifdef __EMSCRIPTEN__
+        int webPatchStart = scriptCodePos;
+#endif
+
+        FileRead(&fileBuffer, 1);
+        int scriptCodeSize = fileBuffer;""", "patch-start")
+
+patch("RSDKv4/Script.cpp",
+"""            function->ptr.jumpTablePtr |= fileBuffer << 24;
+        }
+
+        CloseFile();
+    }
+}""",
+"""            function->ptr.jumpTablePtr |= fileBuffer << 24;
+        }
+
+#ifdef __EMSCRIPTEN__
+        ApplyScriptPatches(scriptPath, webPatchStart, scriptCodePos - webPatchStart);
+#endif
+        CloseFile();
+    }
+}""", "patch-apply")
+
+patch("RSDKv4/Drawing.cpp",
+"""        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, texWidth << 1, texHeight << 1, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, 0);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderbufferHiRes, 0);
+""",
+"""#ifdef __EMSCRIPTEN__ // WEB-PORT:hires-fbo
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texWidth << 1, texHeight << 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+#else
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, texWidth << 1, texHeight << 1, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, 0);
+#endif
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderbufferHiRes, 0);
+#ifdef __EMSCRIPTEN__
+        printf("[hires] framebuffer status 0x%x (0x8cd5 means complete), gl error 0x%x\\n", (unsigned)glCheckFramebufferStatus(GL_FRAMEBUFFER), (unsigned)glGetError());
+#endif
+""", "hires-fbo")
+
+patch("RSDKv4/Renderer.cpp",
+"""        if (state->useFilter && mixFiltersOnJekyll) {
+""",
+"""#ifdef __EMSCRIPTEN__ // WEB-PORT:hires-mix-off
+        if (false) {
+#else
+        if (state->useFilter && mixFiltersOnJekyll) {
+#endif
+""", "hires-mix-off")
+
+if 'webport.patch' in shell:
+    print("  already applied: page-patch-file")
+else:
+    if shell.count("Module.callMain([]);") != 1:
+        sys.exit("ERROR: could not find Module.callMain([]); exactly once in web/shell.html.")
+    shell = shell.replace("Module.callMain([]);",
+        'try {\n'
+        '        if (!/[?&]nopatch(&|$)/.test(location.search)) {\n'
+        '          var patchRes = await fetch("webport.patch", { cache: "no-cache" });\n'
+        '          if (patchRes.ok) FS.writeFile("/webport.patch", await patchRes.text());\n'
+        '        }\n'
+        '      } catch (e) { diagLog("could not load webport.patch: " + e.message); }\n'
+        '      Module.callMain([]);', 1)
+    shell_path.write_text(shell, encoding="utf-8")
+    print("  applied: page-patch-file")
 
 print("Done.")

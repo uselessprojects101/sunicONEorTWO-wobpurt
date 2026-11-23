@@ -8,3 +8,4 @@ build/
 *.dll
 node_modules/
 *:Zone.Identifier
+script_listing/

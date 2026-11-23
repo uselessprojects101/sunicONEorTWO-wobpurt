@@ -884,8 +884,15 @@ void SetupViewport()
         glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, Engine.scalingMode ? GL_LINEAR : GL_NEAREST);
         glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+#ifdef __EMSCRIPTEN__ // WEB-PORT:hires-fbo
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texWidth << 1, texHeight << 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+#else
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, texWidth << 1, texHeight << 1, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, 0);
+#endif
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderbufferHiRes, 0);
+#ifdef __EMSCRIPTEN__
+        printf("[hires] framebuffer status 0x%x (0x8cd5 means complete), gl error 0x%x\n", (unsigned)glCheckFramebufferStatus(GL_FRAMEBUFFER), (unsigned)glGetError());
+#endif
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glBindTexture(GL_TEXTURE_2D, 0);
 #endif

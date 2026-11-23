@@ -525,7 +525,11 @@ void RenderScene()
             }
         }
 
+#ifdef __EMSCRIPTEN__ // WEB-PORT:hires-mix-off
+        if (false) {
+#else
         if (state->useFilter && mixFiltersOnJekyll) {
+#endif
 #if RETRO_USING_OPENGL
             glGetIntegerv(GL_FRAMEBUFFER_BINDING, &defaultFramebuffer);
             glBindFramebuffer(GL_FRAMEBUFFER, framebufferHiRes);

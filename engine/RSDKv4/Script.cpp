@@ -3072,6 +3072,10 @@ void ParseScriptFile(char *scriptName, int scriptID)
 }
 #endif
 
+#ifdef __EMSCRIPTEN__
+void ApplyScriptPatches(const char *scriptPath, int codeStart, int codeLength);
+#endif
+
 void LoadBytecode(int stageListID, int scriptID)
 {
     char scriptPath[0x40];
@@ -3093,6 +3097,9 @@ void LoadBytecode(int stageListID, int scriptID)
         byte fileBuffer    = 0;
         int *scriptCodePtr = &scriptCode[scriptCodePos];
         int *jumpTablePtr  = &jumpTable[jumpTablePos];
+#ifdef __EMSCRIPTEN__
+        int webPatchStart = scriptCodePos;
+#endif
 
         FileRead(&fileBuffer, 1);
         int scriptCodeSize = fileBuffer;
@@ -3277,6 +3284,9 @@ void LoadBytecode(int stageListID, int scriptID)
             function->ptr.jumpTablePtr |= fileBuffer << 24;
         }
 
+#ifdef __EMSCRIPTEN__
+        ApplyScriptPatches(scriptPath, webPatchStart, scriptCodePos - webPatchStart);
+#endif
         CloseFile();
     }
 }

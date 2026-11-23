@@ -30,3 +30,4 @@ target_link_options(RetroEngine PRIVATE
 set_target_properties(RetroEngine PROPERTIES LINK_DEPENDS "${RETRO_WEB_SHELL}")
 
 target_sources(RetroEngine PRIVATE ${CMAKE_SOURCE_DIR}/RSDKv4/NetworkingWeb.cpp)
+target_sources(RetroEngine PRIVATE ${CMAKE_SOURCE_DIR}/RSDKv4/WebPatch.cpp)

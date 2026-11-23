@@ -21,7 +21,8 @@ cmake --build build -j"$(nproc)"
 
 rm -rf dist && mkdir -p dist
 cp build/index.html build/index.js build/index.wasm dist/
-cp web/net.js web/peerjs.min.js dist/
+cp web/net.js web/peerjs.min.js web/webport.patch dist/
+if [ -f TEST_BUILD ]; then python3 tools/channel.py dist; fi
 touch dist/.nojekyll
 
 rm -rf docs && cp -r dist docs

@@ -33,15 +33,26 @@
   #status { margin-top: 14px; min-height: 1.4em; color: #bcd0ff; font-size: 14px; }
   #status.err { color: #ff8a8a; }
   .fine { margin: 26px auto 0; max-width: 520px; font-size: 12px; line-height: 1.55; color: #6f7799; }
-  #creditsBtn { position: fixed; left: 14px; bottom: 14px; z-index: 5; font-size: 13px; padding: 6px 8px; }
-  #credits { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
+  #cornerLinks { position: fixed; left: 14px; bottom: 14px; z-index: 5; display: flex; gap: 8px; }
+  #creditsBtn, #settingsBtn { font-size: 13px; padding: 6px 8px; }
+  #credits, #settings { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
     padding: 24px; box-sizing: border-box; background: rgba(0,0,0,.82); }
-  #credits .panel { width: min(520px, 100%); max-height: 100%; overflow-y: auto; box-sizing: border-box;
+  #credits .panel, #settings .panel { width: min(520px, 100%); max-height: 100%; overflow-y: auto; box-sizing: border-box;
     padding: 22px 24px; text-align: left; background: #0d0d14; border: 1px solid #2a2f4d; border-radius: 12px; }
-  #credits h2 { margin: 0 0 14px; font-size: 20px; }
-  #credits p { margin: 0 0 12px; font-size: 14px; line-height: 1.6; color: #c8cde8; }
+  #credits h2, #settings h2 { margin: 0 0 14px; font-size: 20px; }
+  #credits p, #settings p { margin: 0 0 12px; font-size: 14px; line-height: 1.6; color: #c8cde8; }
   #credits a { color: #8fa2ff; }
   #credits button { margin-top: 6px; }
+  #settings h3 { margin: 20px 0 10px; font-size: 14px; font-weight: 700; color: #9aa3c7; }
+  #settings h2 + h3 { margin-top: 0; }
+  #settings .field { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 0 0 10px; font-size: 14px; color: #c8cde8; }
+  #settings select { font: inherit; font-size: 14px; color: #e8e8f0; background: #1b2040; border: 1px solid #3b4a8f; border-radius: 8px; padding: 7px 10px; max-width: 62%; }
+  #settings select:hover, #settings select:focus-visible { border-color: #6f86ff; outline: none; }
+  #settings p.hint { margin: 8px 0 0; font-size: 12px; line-height: 1.55; color: #6f7799; }
+  #settings .btnrow { display: flex; gap: 10px; }
+  #saveMsg { min-height: 1.3em; margin-top: 8px; font-size: 13px; color: #bcd0ff; }
+  #saveMsg.err { color: #ff8a8a; }
+  #settingsClose { margin-top: 20px; }
   #whichGame, #storedArea { margin-top: 18px; }
   .choices { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
   #storedList { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 10px; }
@@ -125,7 +136,10 @@
     <p class="fine">your rsdk file and save files are saved locally (IndexedDB)</p>
   </div>
 
-  <button id="creditsBtn" class="link">credits</button>
+  <div id="cornerLinks">
+    <button id="creditsBtn" class="link">credits</button>
+    <button id="settingsBtn" class="link">settings</button>
+  </div>
   <div id="credits" class="hidden" role="dialog" aria-modal="true" aria-labelledby="creditsTitle">
     <div class="panel">
       <h2 id="creditsTitle">credits</h2>
@@ -133,6 +147,33 @@
       <p>built on the RSDKv4 decompilation by Rubberduckycooly and st×tic, from the Retro Engine by Christian “Taxman” Whitehead. Non-commercial.</p>
       <p>Font: Ubuntu Sans © Canonical Ltd, <a href="https://ubuntu.com/legal/font-licence" target="_blank" rel="noopener">Ubuntu Font Licence 1.0</a>.</p>
       <button id="creditsClose">close</button>
+    </div>
+  </div>
+  <div id="settings" class="hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="panel">
+      <h2 id="settingsTitle">settings</h2>
+
+      <h3>display</h3>
+      <label class="field"><span>render size</span>
+        <select id="setScale"></select>
+      </label>
+
+      <h3>saves</h3>
+      <label class="field"><span>game</span>
+        <select id="setGame">
+          <option value="s1">sonic 1</option>
+          <option value="s2">sonic 2</option>
+        </select>
+      </label>
+      <div class="btnrow">
+        <button id="saveExport" class="alt">export saves</button>
+        <button id="saveImport" class="alt">import saves</button>
+      </div>
+      <input id="saveFile" type="file" accept=".json" class="hidden">
+      <div id="saveMsg"></div>
+      <p class="hint">exports your saves and settings.ini as one file. your rsdk is never included.</p>
+
+      <button id="settingsClose">close</button>
     </div>
   </div>
 </div>
@@ -369,7 +410,164 @@
   $("creditsBtn").addEventListener("click", function () { showCredits(true); });
   $("creditsClose").addEventListener("click", function () { showCredits(false); });
   $("credits").addEventListener("click", function (e) { if (e.target === $("credits")) showCredits(false); });
-  window.addEventListener("keydown", function (e) { if (e.key === "Escape" && !$("credits").classList.contains("hidden")) showCredits(false); });
+  window.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape") return;
+    if (!$("settings").classList.contains("hidden")) showSettings(false);
+    else if (!$("credits").classList.contains("hidden")) showCredits(false);
+  });
+
+  var SCALE_MAX = 8;
+  var DEFAULTS = { scale: 2 };
+  var settings = loadSettings();
+
+  function loadSettings() {
+    var raw = {}, out = {}, k;
+    try { raw = JSON.parse(localStorage.getItem("rsdkweb_settings") || "{}") || {}; } catch (e) { raw = {}; }
+    for (k in DEFAULTS) out[k] = typeof raw[k] === typeof DEFAULTS[k] ? raw[k] : DEFAULTS[k];
+    if (out.scale % 1 !== 0 || out.scale < 1 || out.scale > SCALE_MAX) out.scale = DEFAULTS.scale;
+    return out;
+  }
+  function saveSettings() {
+    try { localStorage.setItem("rsdkweb_settings", JSON.stringify(settings)); } catch (e) {}
+  }
+
+  function fillScaleOptions() {
+    var sel = $("setScale"), i, o;
+    sel.innerHTML = "";
+    for (i = 1; i <= SCALE_MAX; i++) {
+      o = document.createElement("option");
+      o.value = String(i);
+      o.textContent = i + "x  (" + (424 * i) + " \u00d7 " + (240 * i) + ")" + (i === DEFAULTS.scale ? "  default" : "");
+      sel.appendChild(o);
+    }
+  }
+  function syncForm() {
+    fillScaleOptions();
+    $("setScale").value = String(settings.scale);
+  }
+  function readForm() {
+    settings.scale = parseInt($("setScale").value, 10);
+    saveSettings();
+  }
+  function saveMsg(msg, isErr) { var m = $("saveMsg"); m.textContent = msg || ""; m.className = isErr ? "err" : ""; }
+
+  function showSettings(on) {
+    $("settings").classList.toggle("hidden", !on);
+    if (on) { syncForm(); saveMsg(""); $("settingsClose").focus(); } else { $("settingsBtn").focus(); }
+  }
+  $("settingsBtn").addEventListener("click", function () { showSettings(true); });
+  $("settingsClose").addEventListener("click", function () { showSettings(false); });
+  $("settings").addEventListener("click", function (e) { if (e.target === $("settings")) showSettings(false); });
+  $("setScale").addEventListener("change", readForm);
+
+  function mergeIni(text, edits) {
+    var lines = text.length ? text.split(/\r?\n/) : [];
+    if (lines.length && lines[lines.length - 1] === "") lines.pop();
+    edits.forEach(function (e) {
+      var cur = null, last = -1, i, m, kv;
+      for (i = 0; i < lines.length; i++) {
+        m = /^\s*\[([^\]]*)\]/.exec(lines[i]);
+        if (m) { cur = m[1]; if (cur === e[0]) last = i; continue; }
+        if (cur === e[0]) {
+          last = i;
+          kv = /^\s*([^;=#\s][^;=]*?)\s*=/.exec(lines[i]);
+          if (kv && kv[1] === e[1]) { lines[i] = e[1] + "=" + e[2]; return; }
+        }
+      }
+      if (last >= 0) { lines.splice(last + 1, 0, e[1] + "=" + e[2]); return; }
+      if (lines.length) lines.push("");
+      lines.push("[" + e[0] + "]");
+      lines.push(e[1] + "=" + e[2]);
+    });
+    return lines.join("\n") + "\n";
+  }
+
+  async function applySettings() {
+    var path = "/data/settings.ini", text = null;
+    try { if (FS.analyzePath(path).exists) text = new TextDecoder().decode(FS.readFile(path)); } catch (e) { text = null; }
+    var untouched = settings.scale === DEFAULTS.scale;
+    if (text === null && untouched) return;
+    var next = mergeIni(text || "", [
+      ["Dev", "DevMenu", "false"],
+      ["Dev", "EngineDebugMode", "false"],
+      ["Window", "ScalingMode", "0"],
+      ["Window", "WindowScale", String(settings.scale)],
+      ["Window", "ScreenWidth", "424"]
+    ]);
+    try { FS.writeFile(path, next); await syncToDisk(); } catch (e) { diagLog("could not write settings: " + e.message); }
+  }
+
+  function toBase64(u8) {
+    var s = "", i;
+    for (i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  function fromBase64(b64) {
+    var s = atob(b64), u8 = new Uint8Array(s.length), i;
+    for (i = 0; i < s.length; i++) u8[i] = s.charCodeAt(i);
+    return u8;
+  }
+  function engineReady() {
+    if (runtimeReady && FS) return true;
+    saveMsg("the engine is still loading, try again in a sec", true);
+    return false;
+  }
+
+  async function exportSaves() {
+    var id = $("setGame").value;
+    if (!engineReady()) return;
+    try {
+      await mountGame(id);
+      var dir = GAMES[id].dir, files = {}, count = 0;
+      FS.readdir(dir).forEach(function (name) {
+        if (name === "." || name === ".." || /\.rsdk$/i.test(name)) return;
+        var p = dir + "/" + name;
+        if (!FS.isFile(FS.stat(p).mode)) return;
+        files[name] = toBase64(FS.readFile(p));
+        count++;
+      });
+      if (!count) { saveMsg("nothing to export for " + GAMES[id].name + " yet, play it once first", true); return; }
+      var blob = new Blob([JSON.stringify({ format: "rsdkweb-saves", version: 1, game: id, files: files })], { type: "application/json" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "sonic-" + id.slice(1) + "-saves.json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+      saveMsg("exported " + count + " file" + (count === 1 ? "" : "s") + " for " + GAMES[id].name);
+    } catch (e) {
+      saveMsg("export failed: " + (e && e.message || e), true);
+    }
+  }
+
+  async function importSaves(file) {
+    if (!file) return;
+    if (!engineReady()) return;
+    try {
+      var data = JSON.parse(await file.text());
+      if (!data || data.format !== "rsdkweb-saves" || data.version !== 1 || !data.files || typeof data.files !== "object") throw new Error("that isn't a saves file from this page");
+      var id = data.game;
+      if (!GAMES[id]) throw new Error("that saves file doesn't say which game it's for");
+      var names = Object.keys(data.files);
+      if (!names.length || names.length > 64) throw new Error("that saves file looks wrong");
+      names.forEach(function (n) {
+        if (!/^[A-Za-z0-9._ -]+$/.test(n) || n.charAt(0) === "." || /\.rsdk$/i.test(n) || typeof data.files[n] !== "string") throw new Error("that saves file has a file i won't import (" + n + ")");
+      });
+      if (!window.confirm("replace your current " + GAMES[id].name + " saves with the ones in this file? your rsdk stays as it is.")) { saveMsg("cancelled"); return; }
+      await mountGame(id);
+      var dir = GAMES[id].dir;
+      names.forEach(function (n) { FS.writeFile(dir + "/" + n, fromBase64(data.files[n])); });
+      await syncToDisk();
+      $("setGame").value = id;
+      saveMsg("imported " + names.length + " file" + (names.length === 1 ? "" : "s") + " into " + GAMES[id].name);
+    } catch (e) {
+      saveMsg("import failed: " + (e && e.message || e), true);
+    }
+  }
+  $("saveExport").addEventListener("click", exportSaves);
+  $("saveImport").addEventListener("click", function () { $("saveFile").value = ""; $("saveFile").click(); });
+  $("saveFile").addEventListener("change", function (e) { importSaves(e.target.files[0]); });
 
   function toggleFullscreen() {
     if (document.fullscreenElement) { document.exitFullscreen(); return; }
@@ -405,12 +603,19 @@
       }
       linkData(id);
       if (!FS.analyzePath("/data/Data.rsdk").exists) throw new Error("couldn't point the game at your save folder (see the box below)");
+      await applySettings();
       status("");
       $("setup").classList.add("hidden");
       $("stage").classList.remove("hidden");
       started = true;
       startAutosave();
       $("canvas").focus();
+      try {
+        if (!/[?&]nopatch(&|$)/.test(location.search)) {
+          var patchRes = await fetch("webport.patch", { cache: "no-cache" });
+          if (patchRes.ok) FS.writeFile("/webport.patch", await patchRes.text());
+        }
+      } catch (e) { diagLog("could not load webport.patch: " + e.message); }
       Module.callMain([]);
     } catch (err) {
       console.error(err);
